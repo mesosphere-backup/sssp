@@ -1,0 +1,13 @@
+* {
+  font-family: monospace;
+  background: #333333;
+  color: #dddddd;
+}
+
+input[type="submit"] {
+  font-family: monospace !important;
+}
+
+input {
+  border: white solid thin;
+}

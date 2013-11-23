@@ -1,7 +1,24 @@
-@(message: String)
+@(bucketRouter: Map[String, Route], routeForm: Form[Route])
+@import helper._
 
-@main("Welcome to Play") {
-
-    @play20.welcome(message)
-
+@main("SSSP") {
+    @form(routes.Application.newRoute) {
+        @inputText(routeForm("path"),   'placeholder -> "path in SSSP")
+        @inputText(routeForm("bucket"), 'placeholder -> "name of bucket")
+        @inputText(routeForm("access"), 'placeholder -> "AWS_ACCESS_KEY")
+        @inputText(routeForm("secret"), 'placeholder -> "AWS_SECRET_KEY")
+        <input type="submit" value="Submit">
+    }
+    <table>
+        <tr><th>path</th>
+            <th>bucket</th><th>AWS_ACCESS_KEY</th><th>AWS_SECRET_KEY</th></tr>
+        @for(route <- bucketRouter.values) {
+        <tr>
+            <td>@route.path</td>
+            <td>@route.bucket</td>
+            <td>@route.access</td>
+            <td>@route.secret</td>
+        </tr>
+        }
+    </table>
 }
