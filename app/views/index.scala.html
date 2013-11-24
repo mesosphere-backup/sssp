@@ -1,24 +1,50 @@
-@(bucketRouter: Map[String, Route], routeForm: Form[Route])
+@(bucketRouter: Map[String, Route], routeForm: Form[RouteChange])
 @import helper._
 
 @main("SSSP") {
-    @form(routes.Application.newRoute) {
-        @inputText(routeForm("path"),   'placeholder -> "path in SSSP")
-        @inputText(routeForm("bucket"), 'placeholder -> "name of bucket")
-        @inputText(routeForm("access"), 'placeholder -> "AWS_ACCESS_KEY")
-        @inputText(routeForm("secret"), 'placeholder -> "AWS_SECRET_KEY")
-        <input type="submit" value="Submit">
-    }
-    <table>
-        <tr><th>path</th>
-            <th>bucket</th><th>AWS_ACCESS_KEY</th><th>AWS_SECRET_KEY</th></tr>
+    <table id="routes">
+        <thead>
+        <tr><th>route</th>
+            <th>bucket</th><th>AWS_ACCESS_KEY</th><th>AWS_SECRET_KEY</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr>
+        @form(routes.Application.handleForm, 'class -> "create") {
+            <td><input type="text" name="path"
+                       size=25 required autofocus
+                       placeholder="new route"></td>
+            <td><input type="text" name="bucket"
+                       size=25 required
+                       placeholder="S3 bucket"></td>
+            <td><input type="text" name="access"
+                       size=25 required
+                       placeholder="access key"></td>
+            <td><input type="text" name="secret"
+                       size=50 required
+                       placeholder="secret key"></td>
+            <td><input type="submit" name="action" value="create"></td>
+        }
+        </tr>
         @for(route <- bucketRouter.values) {
         <tr>
-            <td>@route.path</td>
-            <td>@route.bucket</td>
-            <td>@route.access</td>
-            <td>@route.secret</td>
+        @form(routes.Application.handleForm, 'class -> "delete") {
+            <td><input type="text" name="path"
+                       size=25 readonly
+                       value="@route.path"></td>
+            <td><input type="text" name="bucket"
+                       size=25 readonly
+                       value="@route.bucket"></td>
+            <td><input type="text" name="access"
+                       size=25 readonly
+                       value="@route.access"></td>
+            <td><input type="text" name="secret"
+                       size=50 readonly
+                       value="@route.secret"></td>
+            <td><input type="submit" name="action" value="delete"></td>
+        }
         </tr>
         }
+        </tbody>
     </table>
 }

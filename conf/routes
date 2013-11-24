@@ -5,5 +5,5 @@
 # Home page
 GET     /                           controllers.Application.index
 
-POST    /                           controllers.Application.newRoute
+POST    /                           controllers.Application.handleForm
 
