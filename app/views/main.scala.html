@@ -8,6 +8,7 @@
         <style>
             * {
                 font-family: monospace;
+                box-sizing: border-box;
             }
             body {
               margin: 0;
@@ -17,9 +18,20 @@
               right: 0;
               bottom: 0;
             }
+            input {
+                width: 100%;
+            }
             input[type=submit] {
                 font-family: monospace !important;
                 background: #eeeeee;
+                border: none;
+            }
+            td {
+                padding: 0 4px;
+            }
+            select {
+                font-family: monospace !important;
+                background: white;
                 border: none;
             }
             #routes {
