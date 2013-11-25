@@ -12,4 +12,10 @@ libraryDependencies ++= Seq(
 //   "mesosphere" % "mesos-utils" % "0.0.6"
 // )
 
+unmanagedSourceDirectories in Compile +=
+  (baseDirectory.value / "src/main/scala")
+
+unmanagedSourceDirectories in Test +=
+  (baseDirectory.value / "src/main/scala")
+
 play.Project.playScalaSettings

@@ -1,11 +1,15 @@
-@(bucketRouter: Map[String, Route], routeForm: Form[RouteChange])
+@(routeChanges: Seq[RouteChange], routeForm: Form[RouteChange])
 @import helper._
 
 @main("SSSP") {
     <table id="routes">
         <thead>
-        <tr><th>route</th>
-            <th>bucket</th><th>AWS_ACCESS_KEY</th><th>AWS_SECRET_KEY</th>
+        <tr>
+            <th>Route</th>
+            <th>Bucket</th>
+            <th>S3 Region</th>
+            <th>AWS Access Key</th>
+            <th>AWS Secret Key</th>
         </tr>
         </thead>
         <tbody>
@@ -17,6 +21,9 @@
             <td><input type="text" name="bucket"
                        size=25 required
                        placeholder="S3 bucket"></td>
+            <td><input type="text" name="region"
+                       size=16 required
+                       value="classic"></td>
             <td><input type="text" name="access"
                        size=25 required
                        placeholder="access key"></td>
@@ -26,21 +33,24 @@
             <td><input type="submit" name="action" value="create"></td>
         }
         </tr>
-        @for(route <- bucketRouter.values) {
+        @for(change <- routeChanges) {
         <tr>
         @form(routes.Application.handleForm, 'class -> "delete") {
             <td><input type="text" name="path"
                        size=25 readonly
-                       value="@route.path"></td>
+                       value="@change.path"></td>
             <td><input type="text" name="bucket"
                        size=25 readonly
-                       value="@route.bucket"></td>
+                       value="@change.bucket"></td>
+            <td><input type="text" name="region"
+                       size=16 readonly
+                       value="@change.region"></td>
             <td><input type="text" name="access"
                        size=25 readonly
-                       value="@route.access"></td>
+                       value="@change.access"></td>
             <td><input type="text" name="secret"
                        size=50 readonly
-                       value="@route.secret"></td>
+                       value="@change.secret"></td>
             <td><input type="submit" name="action" value="delete"></td>
         }
         </tr>
