@@ -7,3 +7,9 @@ GET     /                           controllers.Application.index
 
 POST    /                           controllers.Application.handleForm
 
+GET     /*s                         controllers.Application.notary(s)
+PUT     /*s                         controllers.Application.notary(s)
+POST    /*s                         controllers.Application.notary(s)
+HEAD    /*s                         controllers.Application.notary(s)
+DELETE  /*s                         controllers.Application.notary(s)
+
