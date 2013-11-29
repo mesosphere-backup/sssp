@@ -1,7 +1,11 @@
 package mesosphere.sssp
 
+import com.amazonaws.auth._
+import com.amazonaws.regions._
 import java.util.Date
-import java.net.URL
+import org.jets3t.service.impl.rest.httpclient.RestS3Service
+import org.jets3t.service.security.AWSCredentials
+import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.util.matching.Regex
 
@@ -12,22 +16,27 @@ class S3Notary(val bucket: String,
                    new EnvironmentVariableCredentialsProvider(),
                val defaultExpiration: Duration = 10 seconds) {
 
-  var client: S3Client = null
+  var client: RestS3Service = null
 
   def sign(key: String,
-           method: HttpMethod,
+           method: String,
            headers: Map[String, Seq[String]] = Map(),
-           lifetime: Duration = defaultExpiration): URL = {
+           lifetime: Duration = defaultExpiration): (String, Long, Date) = {
     if (client == null) reconnect()
-    val expires = new Date(System.currentTimeMillis() + lifetime.toMillis)
-    val request = new GeneratePresignedUrlRequest(bucket, key, method)
-    client.generatePresignedUrl(request.withExpiration(expires))
+    val seconds = (System.currentTimeMillis() + lifetime.toMillis) / 1000L
+    val jHeaders: Map[String, AnyRef] =
+      S3Notary.normHeaders(headers).mapValues(_.asInstanceOf[AnyRef])
+    val url = client
+      .createSignedUrl(method, bucket, key, "", jHeaders.asJava, seconds)
+    (url, lifetime.toSeconds, new Date(seconds * 1000))
   }
 
   def reconnect() {
     credentials.refresh()
-    client = new S3Client(credentials)
-    client.setRegion(region)
+    val access = credentials.getCredentials.getAWSAccessKeyId
+    val secret = credentials.getCredentials.getAWSSecretKey
+    // TODO: get regions to work
+    client = new RestS3Service(new AWSCredentials(access, secret))
   }
 }
 
@@ -36,41 +45,18 @@ object S3Notary {
     Regions.values.map(r => (r.getName -> Region.getRegion(r))).toMap +
     ("classic" -> Region.getRegion(Regions.US_EAST_1))
 
-  /* The PUT signing in Amazon's Java SDK does not exactly work out of the box.
-  http://stackoverflow.com/questions/10100193/put-file-to-s3-with-presigned-url
+  /**
+   * Filters for and normalizes headers that can be meaningfully passed on to
+   * S3 (and influence signing). These include Content-Type, Content-MD5 and
+   * the x-amz-... meta-headers peculiar to Amazon.
+   *
+   * @param headers  HTTP headers in a relatively common format: a map from
+   *                 strings to lists of strings.
+   * @return         Headers that are "interesting" with multiples entries
+   *                 joined by commas.
    */
-
-  val storableHeaders: Set[String] = Set(
-    "Content-Type",
-    "Cache-Control",
-    "Content-Disposition",
-    "Content-Encoding",
-    "Content-MD5",
-    "Expires",
-    "x-amz-acl",
-    "x-amz-storage-class"
-  )
-
-  val signableHeaders: Set[String] = Set(
-    "Content-Type",
-    "Content-MD5"
-  )
-
-  val metaHeaders: Regex = "^x-amz-".r
-
-  def presignedURLRequestWithMergedHeaders(bucket: String,
-                                           key: String,
-                                           method: HttpMethod,
-                                           headers: Map[String, Seq[String]]):
-  GeneratePresignedUrlRequest = {
-    val normed = for ((k, v) <- headers) yield (k.toLowerCase -> v)
-    val req = new GeneratePresignedUrlRequest(bucket, key, method)
-
-    normed.getOrElse("Content-Type".toLowerCase, Seq()) match {
-      case Seq(s, tail@_*) => req.setContentType(s)
-      case Seq(          ) => {}
-    }
-
-    req
+  def normHeaders(headers: Map[String, Seq[String]]): Map[String, String] = {
+    val Special: Regex = "(?i)^(Content-Type|Content-MD5|x-amz-.+)$".r
+    headers.collect { case (Special(h), v) => (h -> v.mkString(",")) }
   }
 }
