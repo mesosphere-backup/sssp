@@ -1,6 +1,5 @@
 @(routeChanges: Seq[RouteChange], routeForm: Form[RouteChange])
 @import helper._
-@import controllers.Application.regionsList
 
 @main("SSSP") {
     <table id="routes">
@@ -8,7 +7,6 @@
         <tr>
             <th>Route</th>
             <th>Bucket</th>
-            <th>S3 Region</th>
             <th>AWS Access Key</th>
             <th>AWS Secret Key</th>
         </tr>
@@ -22,11 +20,6 @@
             <td><input type="text" name="bucket"
                        size=25 required
                        placeholder="S3 bucket"></td>
-            <td><select name="region">
-                @for(k <- regionsList()) {
-                    <option value="@k">@k</option>
-                }
-                </select></td>
             <td><input type="text" name="access"
                        size=25 required
                        placeholder="access key"></td>
@@ -45,15 +38,6 @@
             <td><input type="text" name="bucket"
                        size=25 readonly
                        value="@change.bucket"></td>
-            <td><select name="region" disabled>
-                @for(k <- regionsList()) {
-                    @if(k == change.region) {
-                    <option value="@k" selected>@k</option>
-                    } else {
-                    <option value="@k">@k</option>
-                    }
-                }
-                </select></td> <!-- Make this editable some day. -->
             <td><input type="text" name="access"
                        size=25 readonly
                        value="@change.access"></td>

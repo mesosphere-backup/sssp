@@ -1,7 +1,6 @@
 package mesosphere.sssp
 
 import com.amazonaws.auth._
-import com.amazonaws.regions._
 import java.util.Date
 import org.jets3t.service.impl.rest.httpclient.RestS3Service
 import org.jets3t.service.security.AWSCredentials
@@ -11,7 +10,6 @@ import scala.util.matching.Regex
 
 
 class S3Notary(val bucket: String,
-               val region: Region = Region.getRegion(Regions.US_EAST_1),
                val credentials: AWSCredentialsProvider =
                    new EnvironmentVariableCredentialsProvider(),
                val defaultExpiration: Duration = 10 seconds) {
@@ -35,16 +33,11 @@ class S3Notary(val bucket: String,
     credentials.refresh()
     val access = credentials.getCredentials.getAWSAccessKeyId
     val secret = credentials.getCredentials.getAWSSecretKey
-    // TODO: get regions to work
     client = new RestS3Service(new AWSCredentials(access, secret))
   }
 }
 
 object S3Notary {
-  val regions: Map[String, Region] =
-    Regions.values.map(r => (r.getName -> Region.getRegion(r))).toMap +
-    ("classic" -> Region.getRegion(Regions.US_EAST_1))
-
   /**
    * Filters for and normalizes headers that can be meaningfully passed on to
    * S3 (and influence signing). These include Content-Type, Content-MD5 and

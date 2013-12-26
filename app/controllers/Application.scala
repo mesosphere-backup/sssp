@@ -24,10 +24,9 @@ object Application extends Controller {
         change => {
           change.action match {
             case "create" => {
-              val region = S3Notary.regions(change.region)
               val creds = new BasicAWSCredentials(change.access, change.secret)
               val provider = new StaticCredentialsProvider(creds)
-              val notary = new S3Notary(change.bucket, region, provider)
+              val notary = new S3Notary(change.bucket, provider)
               val path = change.path.split('/').filterNot(_.isEmpty).toSeq
               ssspRoutes += (path -> notary)
             }
@@ -46,19 +45,10 @@ object Application extends Controller {
       val creds = notary.credentials.getCredentials()
       RouteChange("/" + path.mkString("/"),
                   notary.bucket,
-                  notary.region.getName,
                   creds.getAWSAccessKeyId,
                   creds.getAWSSecretKey,
                   "create")
     }
-
-  def regionsList(): Seq[String] = S3Notary.regions.keys.toSeq.sortWith {
-    // Ensure classic is the first, default selection.
-    case ("classic", _) => true
-    case (_, "classic") => false
-    // Otherwise, sort alphabetically.
-    case (a, b)           => a < b
-  }
 
   def notary(s: String) = Action { implicit request =>
     val path = s.split('/').filterNot(_.isEmpty).toSeq

@@ -7,7 +7,6 @@ import play.api.data.format.Formats._
 
 case class RouteChange(path:   String,
                        bucket: String,
-                       region: String,
                        access: String,
                        secret: String,
                        action: String) {
@@ -18,7 +17,6 @@ object RouteChange {
     mapping(
       "path"   -> of[String],
       "bucket" -> of[String],
-      "region" -> of[String],
       "access" -> of[String],
       "secret" -> of[String],
       "action" -> of[String]
