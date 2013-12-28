@@ -2,3 +2,33 @@ This is your new Play application
 =====================================
 
 This file will be packaged with your application, when using `play dist`.
+
+JSON Configuration
+==================
+
+JSON routing configuration -- mapping prefixes in SSSP to buckets in S3 -- can
+be `POST`ed to the root resource (`/`) as well as added to a configuration
+file (`conf/stores.json` by default). The JSON configuration is map of
+prefixes to JSON objects containing a bucket name and AWS access credentials:
+
+    {
+      "/downloads": {
+        "s3": {
+          "bucket": "files.example.com",
+          "access": "....................",
+          "secret": "........................................" }
+      },
+      "/gifs/team": {
+        "s3": {
+          "bucket": "memes.example.com",
+          "access": "....................",
+          "secret": "........................................" }
+      },
+    }
+
+The prefixes are always treated as though they started *and ended* with a
+slash (though both slashes can be safely omitted from the configuration).
+Thus, to obtain the S3 object `s3://memes.example.com/m/molly/glasses.gif`
+given the above configuration, one would issue
+`GET /gifs/team/m/molly/glasses.gif` to SSSP.
+

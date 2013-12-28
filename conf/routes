@@ -5,7 +5,7 @@
 # Home page
 GET     /                           controllers.Application.index
 
-POST    /                           controllers.Application.handleForm
+POST    /                           controllers.Application.handleChanges
 
 GET     /*s                         controllers.Application.notary(s)
 PUT     /*s                         controllers.Application.notary(s)

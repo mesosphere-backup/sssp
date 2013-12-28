@@ -1,4 +1,4 @@
-@(routeChanges: Seq[RouteChange], routeForm: Form[RouteChange])
+@(formChanges: Seq[FormChange], changeForm: Form[FormChange])
 @import helper._
 
 @main("SSSP") {
@@ -13,7 +13,7 @@
         </thead>
         <tbody>
         <tr>
-        @form(routes.Application.handleForm, 'class -> "create") {
+        @form(routes.Application.handleChanges, 'class -> "create") {
             <td><input type="text" name="path"
                        size=25 required autofocus
                        placeholder="new route"></td>
@@ -29,9 +29,9 @@
             <td><input type="submit" name="action" value="create"></td>
         }
         </tr>
-        @for(change <- routeChanges) {
+        @for(change <- formChanges) {
         <tr>
-        @form(routes.Application.handleForm, 'class -> "delete") {
+        @form(routes.Application.handleChanges, 'class -> "delete") {
             <td><input type="text" name="path"
                        size=25 readonly
                        value="@change.path"></td>
