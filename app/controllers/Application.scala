@@ -16,9 +16,17 @@ import scala.concurrent.Await
 
 object Application extends Controller {
   val ssspRoutes: Routes = new Routes()
+  var scheduler: Option[mesos.Scheduler] = None
 
-  def index() = Action {
-    Ok(views.html.index(routesAsFormChanges(), FormChange.form))
+  def index() = Action { implicit request => {
+      val jsonRequest = request.contentType
+        .map(Seq("application/json", "text/json").contains(_))
+      if (jsonRequest.getOrElse(false)) {
+        Ok(Json.prettyPrint(routesAsJson()))
+      } else {
+        Ok(views.html.index(routesAsFormChanges(), FormChange.form))
+      }
+    }
   }
 
   def handleChanges = Action { implicit request => {
@@ -29,6 +37,13 @@ object Application extends Controller {
       }
       Await.result(res, Duration.Inf)
     }
+  }
+
+  def head = Action { Ok("") }
+
+  def clearRoutes = Action {
+    ssspRoutes.clear()
+    Ok("")
   }
 
   def handleJson: Action[AnyContent] = Action { implicit request =>
@@ -52,7 +67,10 @@ object Application extends Controller {
   }
 
   def updateRoutes(map: Map[String, Change],
-                   request: Option[Request[_]] = None) =
+                   request: Option[Request[_]] = None) = {
+    // PUT requests result in an overwrite, not an update.
+    if (request.map(_.method == "PUT").getOrElse(false)) ssspRoutes.clear()
+
     for ((s, change) <- map) {
       val path = s.split('/').filterNot(_.isEmpty).toSeq
       val msg = s"//routes// $s -> ${change.summary}"
@@ -68,6 +86,12 @@ object Application extends Controller {
       }
     }
 
+    for (m <- scheduler) {
+      Logger.info("Updating routes for Mesos scheduler.")
+      m.updateState(Json.prettyPrint(routesAsJson()))
+    }
+  }
+
   def routesAsFormChanges(): Seq[FormChange] =
     for ((path, notary) <- ssspRoutes.toSeq) yield {
       val creds = notary.credentials.getCredentials()
@@ -79,13 +103,17 @@ object Application extends Controller {
     }
 
   // Presently unused.
-  def routesAsChanges(): Map[String, AddS3] =
+  def routesAsChanges(): Map[String, Change] =
     for ((path, notary) <- ssspRoutes.toMap) yield {
       val creds = notary.credentials.getCredentials()
       val s3 = S3(notary.bucket, creds.getAWSAccessKeyId.map(_ => '•'),
                                  creds.getAWSSecretKey.map(_ => '•'))
       (("/" + path.mkString("/")) -> AddS3(s3))
     }
+
+  def routesAsJson(): JsValue = {
+    Json.toJson(routesAsChanges().mapValues(Json.toJson(_)))
+  }
 
   def notary(s: String) = Action { implicit request =>
     val path = s.split('/').filterNot(_.isEmpty).toSeq

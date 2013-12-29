@@ -1,11 +1,8 @@
-# Routes
-# This file defines all application routes (Higher priority routes first)
-# ~~~~
-
-# Home page
 GET     /                           controllers.Application.index
-
+PUT     /                           controllers.Application.handleChanges
 POST    /                           controllers.Application.handleChanges
+HEAD    /                           controllers.Application.head
+DELETE  /                           controllers.Application.clearRoutes
 
 GET     /*s                         controllers.Application.notary(s)
 PUT     /*s                         controllers.Application.notary(s)

@@ -8,8 +8,8 @@ JSON Configuration
 
 JSON routing configuration -- mapping prefixes in SSSP to buckets in S3 -- can
 be `POST`ed to the root resource (`/`) as well as added to a configuration
-file (`conf/stores.json` by default). The JSON configuration is map of
-prefixes to JSON objects containing a bucket name and AWS access credentials:
+file (`conf/s3.json` by default). The JSON configuration is a map of prefixes
+to JSON objects containing a bucket name and AWS access credentials:
 
     {
       "/downloads": {
