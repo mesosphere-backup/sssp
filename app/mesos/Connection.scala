@@ -19,7 +19,8 @@ object Connection {
       } yield {
         val ZKURL = "^zk://([^/]+)/([^/].*)$".r
         zk match {
-          case ZKURL(hosts, path) => Connection(m, ZKConnection(hosts, path))
+          case ZKURL(hosts, path) =>
+            Connection(m, ZKConnection(hosts, '/' +: path))
         }
       }
     } orElse c.getConfig("mesos").map(fromConfig)

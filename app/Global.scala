@@ -1,6 +1,4 @@
 import java.io.File
-import mesosphere.mesos.util.FrameworkInfo
-import org.apache.mesos.MesosSchedulerDriver
 import play.api._
 import play.api.libs.json._
 import play.api.Play.current
@@ -11,11 +9,13 @@ import models._
 object Global extends GlobalSettings {
   override def onStart(app: Application) {
     for (m <- Play.configuration.getConfig("mesos")) {
-      val settings = mesos.Connection.fromConfig(m)
-      val settingsString = Json.stringify(Json.toJson(settings))
+      val conn = mesos.Connection.fromConfig(m)
+      val settingsString = Json.stringify(Json.toJson(conn))
       Logger.info(s"Mesos configuration is: $settingsString")
-      controllers.Application.scheduler = Some(new mesos.Scheduler(settings))
-      startScheduler(controllers.Application.scheduler.get)
+      val coordinator = mesos.Coordinator(conn)
+      controllers.Application.coordinator = Some(coordinator)
+      (new Thread(coordinator)).start()
+      Logger.info("Running Mesos coordinator in the background.")
     }
 
     val stores = Play.configuration.getString("s3file").flatMap(p => {
@@ -32,11 +32,4 @@ object Global extends GlobalSettings {
   }
 
   override def onStop(app: Application) {}
-
-  def startScheduler(scheduler: mesos.Scheduler) {
-    val framework = FrameworkInfo("SSSP")
-    val master = scheduler.connection.master
-    val driver = new MesosSchedulerDriver(scheduler, framework.toProto, master)
-    driver.run()
-  }
 }

@@ -16,7 +16,7 @@ import scala.concurrent.Await
 
 object Application extends Controller {
   val ssspRoutes: Routes = new Routes()
-  var scheduler: Option[mesos.Scheduler] = None
+  var coordinator: Option[mesos.Coordinator] = None
 
   def index() = Action { implicit request => {
       val jsonRequest = request.contentType
@@ -86,10 +86,7 @@ object Application extends Controller {
       }
     }
 
-    for (m <- scheduler) {
-      Logger.info("Updating routes for Mesos scheduler.")
-      m.updateState(Json.prettyPrint(routesAsJson()))
-    }
+    for (m <- coordinator) m.updateState(Json.prettyPrint(routesAsJson()))
   }
 
   def routesAsFormChanges(): Seq[FormChange] =
