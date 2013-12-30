@@ -15,7 +15,7 @@ import scala.concurrent.Await
 
 
 object Application extends Controller {
-  val ssspRoutes: Routes = new Routes()
+  val stores: Routes = new Routes()
   var coordinator: Option[mesos.Coordinator] = None
 
   def index() = Action { implicit request => {
@@ -42,7 +42,7 @@ object Application extends Controller {
   def head = Action { Ok("") }
 
   def clearRoutes = Action {
-    ssspRoutes.clear()
+    stores.clear()
     Ok("")
   }
 
@@ -67,30 +67,46 @@ object Application extends Controller {
   }
 
   def updateRoutes(map: Map[String, Change],
-                   request: Option[Request[_]] = None) = {
+                   request: Option[Request[_]] = None,
+                   clear: Boolean = false) = {
     // PUT requests result in an overwrite, not an update.
-    if (request.map(_.method == "PUT").getOrElse(false)) ssspRoutes.clear()
+    if (request.map(_.method == "PUT").getOrElse(clear)) stores.clear()
 
+    // TODO: Wrap everything, including clear(), in an STM transaction.
     for ((s, change) <- map) {
       val path = s.split('/').filterNot(_.isEmpty).toSeq
       val msg = s"//routes// $s -> ${change.summary}"
       Logger.info(request.map(r => s"${r.id} $msg").getOrElse(msg))
 
       change match {
-        case Remove() => ssspRoutes -= path
+        case Remove() => stores -= path
         case AddS3(S3(bucket, access, secret)) => {
           val creds = new BasicAWSCredentials(access, secret)
           val provider = new StaticCredentialsProvider(creds)
-          ssspRoutes += (path -> new S3Notary(bucket, provider))
+          stores += (path -> new S3Notary(bucket, provider))
         }
       }
     }
 
-    for (m <- coordinator) m.updateState(Json.prettyPrint(routesAsJson()))
+    syncRoutesToCoordinator()
   }
 
+  def syncRoutesFromCoordinator() = for (c <- coordinator) {
+    Json.parse(c.readState()).validate[Map[String, Change]].map { updates =>
+      updateRoutes(updates, clear = true)
+    } recoverTotal { e =>
+      Logger.error("Bad JSON from coordinator: " + JsError.toFlatJson(e))
+    }
+  }
+
+  def syncRoutesToCoordinator(onlyIfEmpty: Boolean = false) =
+    for (c <- coordinator) {
+      val json = routesAsJson(passwordProtect = false)
+      c.writeState(Json.stringify(json), onlyIfEmpty)
+    }
+
   def routesAsFormChanges(): Seq[FormChange] =
-    for ((path, notary) <- ssspRoutes.toSeq) yield {
+    for ((path, notary) <- stores.toSeq) yield {
       val creds = notary.credentials.getCredentials()
       FormChange("/" + path.mkString("/"),
                  notary.bucket,
@@ -99,23 +115,26 @@ object Application extends Controller {
                  "delete")
     }
 
-  // Presently unused.
-  def routesAsChanges(): Map[String, Change] =
-    for ((path, notary) <- ssspRoutes.toMap) yield {
+  def routesAsChanges(passwordProtect: Boolean = true): Map[String, Change] =
+    for ((path, notary) <- stores.toMap) yield {
       val creds = notary.credentials.getCredentials()
-      val s3 = S3(notary.bucket, creds.getAWSAccessKeyId.map(_ => '•'),
-                                 creds.getAWSSecretKey.map(_ => '•'))
+      val s3 = if (passwordProtect) {
+        S3(notary.bucket, creds.getAWSAccessKeyId.map(_ => '•'),
+                          creds.getAWSSecretKey.map(_ => '•'))
+      } else {
+        S3(notary.bucket, creds.getAWSAccessKeyId, creds.getAWSSecretKey)
+      }
       (("/" + path.mkString("/")) -> AddS3(s3))
     }
 
-  def routesAsJson(): JsValue = {
-    Json.toJson(routesAsChanges().mapValues(Json.toJson(_)))
+  def routesAsJson(passwordProtect: Boolean = true): JsValue = {
+    Json.toJson(routesAsChanges(passwordProtect).mapValues(Json.toJson(_)))
   }
 
   def notary(s: String) = Action { implicit request =>
     val path = s.split('/').filterNot(_.isEmpty).toSeq
     Logger.info(s"${request.id} // ${request.method} /$s")
-    ssspRoutes.deepestHandler(path) match {
+    stores.deepestHandler(path) match {
       case Some((prefix, notary)) => {
         val relative: String = path.drop(prefix.length).mkString("/")
         Logger.info(s"${request.id} // /$s -> s3://${notary.bucket}/$relative")
