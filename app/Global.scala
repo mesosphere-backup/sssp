@@ -2,6 +2,7 @@ import java.io.File
 import play.api._
 import play.api.libs.json._
 import play.api.Play.current
+import scala.concurrent.duration._
 import scala.io.Source
 
 import models._
@@ -27,17 +28,20 @@ object Global extends GlobalSettings {
       val coordinator = mesos.Coordinator(conn)
       controllers.Application.coordinator = Some(coordinator)
       (new Thread(coordinator)).start()
-      Logger.info("Running Mesos coordinator in the background.")
+      Logger.info("Running state coordinator in the background.")
       controllers.Application.syncRoutesToCoordinator(onlyIfEmpty = true)
-//    controllers.Application.syncRoutesFromCoordinator()
-      (new Thread(new RouteSyncer())).start()
+      (new Thread(new RouteSyncer(1 second, 10 seconds))).start()
     }
+    // TODO: Don't load local config if Mesos state is non-empty.
   }
 
-  class RouteSyncer extends Runnable {
+  class RouteSyncer(first: Duration, cyclic: Duration) extends Runnable {
     def run() {
-      Thread.sleep(10000)
-      controllers.Application.syncRoutesFromCoordinator()
+      Thread.sleep(first.toMillis)
+      while (true) {
+        controllers.Application.syncRoutesFromCoordinator()
+        Thread.sleep(cyclic.toMillis)
+      }
     }
   }
 

@@ -18,7 +18,7 @@ case class Coordinator(conn: Connection) extends Runnable {
    * @param newState Serialized routes
    */
   def writeState(newState: String,
-                 onlyIfEmpty: Boolean = false): Unit = this.synchronized {
+                 onlyIfEmpty: Boolean = false): Unit = state.synchronized {
     Logger.info(s"//mesos// Storing new configuration.")
     val padded = "    \n" + newState // To make the encoded form easier to read
     val v: Variable = state.fetch("stores").get(10, TimeUnit.SECONDS)
@@ -28,7 +28,7 @@ case class Coordinator(conn: Connection) extends Runnable {
     }
   }
 
-  def readState(): String = this.synchronized {
+  def readState(): String = state.synchronized {
     val v = state.fetch("stores").get(10, TimeUnit.SECONDS)
     val s = new String(v.value, "UTF-8")
     s.substring(5) // Skip padding introduced in writeState()

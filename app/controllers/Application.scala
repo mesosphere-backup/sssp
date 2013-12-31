@@ -12,6 +12,7 @@ import play.api.mvc._
 import models._
 import play.api.libs.json._
 import scala.concurrent.Await
+import scala.concurrent.stm._
 
 
 object Application extends Controller {
@@ -42,7 +43,7 @@ object Application extends Controller {
   def head = Action { Ok("") }
 
   def clearRoutes = Action {
-    stores.clear()
+    updateRoutes(Map(), clear = true)
     Ok("")
   }
 
@@ -69,21 +70,27 @@ object Application extends Controller {
   def updateRoutes(map: Map[String, Change],
                    request: Option[Request[_]] = None,
                    clear: Boolean = false) = {
-    // PUT requests result in an overwrite, not an update.
-    if (request.map(_.method == "PUT").getOrElse(clear)) stores.clear()
+    // We break in to the stores implementation here, to transactionally update
+    // the routes.
+    atomic { implicit txn =>
+      val inner: TMap[Seq[String], S3Notary] = stores.routes
 
-    // TODO: Wrap everything, including clear(), in an STM transaction.
-    for ((s, change) <- map) {
-      val path = s.split('/').filterNot(_.isEmpty).toSeq
-      val msg = s"//routes// $s -> ${change.summary}"
-      Logger.info(request.map(r => s"${r.id} $msg").getOrElse(msg))
+      // PUT requests result in an overwrite, not an update.
+      if (request.map(_.method == "PUT").getOrElse(clear)) inner.clear()
 
-      change match {
-        case Remove() => stores -= path
-        case AddS3(S3(bucket, access, secret)) => {
-          val creds = new BasicAWSCredentials(access, secret)
-          val provider = new StaticCredentialsProvider(creds)
-          stores += (path -> new S3Notary(bucket, provider))
+      // TODO: Wrap everything, including clear(), in an STM transaction.
+      for ((s, change) <- map) {
+        val path = s.split('/').filterNot(_.isEmpty).toSeq
+        val msg = s"//routes// $s -> ${change.summary}"
+        Logger.info(request.map(r => s"${r.id} $msg").getOrElse(msg))
+
+        change match {
+          case Remove() => inner -= path
+          case AddS3(S3(bucket, access, secret)) => {
+            val creds = new BasicAWSCredentials(access, secret)
+            val provider = new StaticCredentialsProvider(creds)
+            inner += (path -> new S3Notary(bucket, provider))
+          }
         }
       }
     }
@@ -93,7 +100,8 @@ object Application extends Controller {
 
   def syncRoutesFromCoordinator() = for (c <- coordinator) {
     Json.parse(c.readState()).validate[Map[String, Change]].map { updates =>
-      updateRoutes(updates, clear = true)
+      val current = routesAsChanges(passwordProtect = false)
+      if (current != updates) updateRoutes(updates, clear = true)
     } recoverTotal { e =>
       Logger.error("Bad JSON from coordinator: " + JsError.toFlatJson(e))
     }
@@ -101,8 +109,8 @@ object Application extends Controller {
 
   def syncRoutesToCoordinator(onlyIfEmpty: Boolean = false) =
     for (c <- coordinator) {
-      val json = routesAsJson(passwordProtect = false)
-      c.writeState(Json.stringify(json), onlyIfEmpty)
+      val s = Json.stringify(routesAsJson(passwordProtect = false))
+      if (c.readState() != s) c.writeState(s, onlyIfEmpty)
     }
 
   def routesAsFormChanges(): Seq[FormChange] =
@@ -134,22 +142,23 @@ object Application extends Controller {
   def notary(s: String) = Action { implicit request =>
     val path = s.split('/').filterNot(_.isEmpty).toSeq
     Logger.info(s"${request.id} // ${request.method} /$s")
-    stores.deepestHandler(path) match {
-      case Some((prefix, notary)) => {
-        val relative: String = path.drop(prefix.length).mkString("/")
-        Logger.info(s"${request.id} // /$s -> s3://${notary.bucket}/$relative")
-        val (signed, seconds, date) =
-          notary.sign(relative, request.method, request.headers.toMap)
-        val formatted = ISODateTimeFormat.dateTimeNoMillis().withZoneUTC()
-          .print(date.getTime)
-        Logger.info(s"${request.id} // Expires: ${seconds}s $formatted")
-        Redirect(signed, 307)
-          .withHeaders(("Cache-Control", f"max-age=${seconds - 1}"))
+    if (stores.isEmpty) ServiceUnavailable else
+      stores.deepestHandler(path) match {
+        case Some((prefix, notary)) => {
+          val relative: String = path.drop(prefix.length).mkString("/")
+          Logger.info(s"${request.id} // /$s -> s3://${notary.bucket}/$relative")
+          val (signed, seconds, date) =
+            notary.sign(relative, request.method, request.headers.toMap)
+          val formatted = ISODateTimeFormat.dateTimeNoMillis().withZoneUTC()
+            .print(date.getTime)
+          Logger.info(s"${request.id} // Expires: ${seconds}s $formatted")
+          Redirect(signed, 307)
+            .withHeaders(("Cache-Control", f"max-age=${seconds - 1}"))
+        }
+        case None => {
+          Logger.info(s"${request.id} // /$s -> No mapping!")
+          Forbidden
+        }
       }
-      case None => {
-        Logger.info(s"${request.id} // /$s -> No mapping!")
-        Forbidden
-      }
-    }
   }
 }

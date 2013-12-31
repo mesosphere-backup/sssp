@@ -5,7 +5,7 @@ import scala.concurrent.stm._
 
 
 class Routes extends mutable.Map[Seq[String], S3Notary] {
-  private val routes: TMap[Seq[String], S3Notary] = TMap()
+  val routes: TMap[Seq[String], S3Notary] = TMap()
 
   def deepestHandler(path: Seq[String]): Option[(Seq[String], S3Notary)] =
     path.inits.map(pre => get(pre).map((pre, _))).toSeq.flatten.lastOption

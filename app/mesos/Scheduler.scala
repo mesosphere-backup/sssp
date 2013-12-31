@@ -37,7 +37,7 @@ class Scheduler extends org.apache.mesos.Scheduler {
 
   def resourceOffers(driver: SchedulerDriver, offers: util.List[Offer]) {
     for (offer <- offers.asScala) {
-      Logger.info(s"//mesos// offer: $offer")
+      Logger.info(s"//mesos// offer received...")
       //
       //      val cmd = CommandInfo.newBuilder
       //        .addUris(CommandInfo.URI.newBuilder.setValue("https://gist.github.com/guenter/7470373/raw/42ed566dba6a22f1b160e9774d750e46e83b61ad/http.py"))
