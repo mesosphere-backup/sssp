@@ -70,15 +70,20 @@ object Application extends Controller {
   def updateRoutes(map: Map[String, Change],
                    request: Option[Request[_]] = None,
                    clear: Boolean = false) = {
+
+    val method = request.map(_.method)
+    val clearing = clear ||
+      method.map(m => Seq("PUT","DELETE").contains(m)).getOrElse(false)
+
+    if (clearing || method.nonEmpty)
+      Logger.info("//routes//" + method.map(" " + _).getOrElse("") +
+                                 (if (clearing) " *cleared*" else ""))
+
     // We break in to the stores implementation here, to transactionally update
     // the routes.
     atomic { implicit txn =>
       val inner: TMap[Seq[String], S3Notary] = stores.routes
-
-      // PUT requests result in an overwrite, not an update.
-      if (request.map(_.method == "PUT").getOrElse(clear)) inner.clear()
-
-      // TODO: Wrap everything, including clear(), in an STM transaction.
+      if (clearing) inner.clear()
       for ((s, change) <- map) {
         val path = s.split('/').filterNot(_.isEmpty).toSeq
         val msg = s"//routes// $s -> ${change.summary}"

@@ -3,7 +3,7 @@ package mesos
 import java.util
 import mesosphere.mesos.util.{FrameworkInfo, ScalarResource}
 import org.apache.mesos.Protos._
-import org.apache.mesos.SchedulerDriver
+import org.apache.mesos.{Protos, ExecutorDriver, Executor, SchedulerDriver}
 import scala.collection.JavaConverters._
 
 import play.Logger
@@ -27,7 +27,11 @@ class Scheduler extends org.apache.mesos.Scheduler {
   def frameworkMessage(driver: SchedulerDriver,
                        executorId: ExecutorID,
                        slaveId: SlaveID,
-                       data: Array[Byte]) {}
+                       data: Array[Byte]) {
+    // Send configuration.
+    driver.sendFrameworkMessage()
+
+  }
 
   def statusUpdate(driver: SchedulerDriver, status: TaskStatus) {
     Logger.info(s"//mesos// status update: $status")
