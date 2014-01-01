@@ -21,7 +21,10 @@ object Global extends GlobalSettings {
       controllers.Application.updateRoutes(changes)
     }
 
-    for (m <- Play.configuration.getConfig("mesos")) {
+    val optionalMesosSettings = Play.configuration.getConfig("mesos")
+                                    .filterNot(_.underlying.entrySet().isEmpty)
+
+    for (m <- optionalMesosSettings) {
       val conn = mesos.Connection.fromConfig(m)
       val settingsString = Json.stringify(Json.toJson(conn))
       Logger.info(s"Mesos configuration is: $settingsString")
