@@ -127,7 +127,7 @@ object WebLogger {
   def error(s: String)(implicit request: Request[_]) = log.error(formatted(s))
 
   def formatted(msg: String)(implicit request: Request[_]) = if (msg != "") {
-    s"#${request.id} ${request.method} ${request.path} - $msg"
+    s"#${request.id} ${request.method} ${request.path} ## $msg"
   } else {
     s"#${request.id} ${request.method} ${request.path}"
   }
