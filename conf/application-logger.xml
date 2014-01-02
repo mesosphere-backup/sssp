@@ -1,0 +1,33 @@
+<configuration>
+    
+  <conversionRule conversionWord="coloredLevel"
+                  converterClass="play.api.Logger$ColoredLevel" />
+  
+  <appender name="FILE" class="ch.qos.logback.core.FileAppender">
+     <file>${application.home}/logs/application.log</file>
+     <encoder>
+       <pattern>%date - [%level] - from %logger in %thread %n%message%n%xException%n</pattern>
+     </encoder>
+   </appender>
+
+  <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%coloredLevel %date{HH:mm:ss.SSS} %logger{15} - %message%n%xException{5}</pattern>
+    </encoder>
+  </appender>
+
+  <root level="ERROR">
+    <appender-ref ref="STDOUT" />
+    <!-- <appender-ref ref="FILE" /> -->
+  </root>
+
+  <logger name="play" level="INFO" />
+  <logger name="application" level="DEBUG" />
+
+  <!-- Loggers peculiar to SSSP. -->
+  <logger name="web" level="DEBUG" />
+  <logger name="mesos" level="DEBUG" />
+  <logger name="stores" level="DEBUG" />
+  
+</configuration>
+
