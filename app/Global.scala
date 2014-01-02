@@ -1,24 +1,26 @@
 import java.io.File
-import play.api._
-import play.api.libs.json._
-import play.api.Play.current
 import scala.concurrent.duration._
 import scala.io.Source
 
+import play.api._
+import play.api.libs.json._
+import play.api.Play.current
+
 import models._
+
 
 object Global extends GlobalSettings {
   override def onStart(app: Application) {
-    val stores = Play.configuration.getString("s3file").flatMap(p => {
+    val stores = Play.configuration.getString("s3file").flatMap { p =>
       val f = new File(p)
       Option(if (f.isAbsolute) f else app.getFile(p)).filter(_.exists())
-    })
+    }
 
     for (f <- stores) {
       Logger.info(s"Loading storage configuration from: $f")
       val s = Source.fromFile(f, "UTF-8").mkString
       val changes = Json.parse(s).validate[Map[String,AddS3]].get
-      controllers.Application.updateRoutes(changes)
+      Stores.updateRoutes(changes)
     }
 
     val optionalMesosSettings = Play.configuration.getConfig("mesos")

@@ -2,7 +2,7 @@ package mesos
 
 import java.util
 import mesosphere.mesos.util.{FrameworkInfo, ScalarResource}
-import org.apache.mesos.Protos._
+import org.apache.mesos.Protos
 import org.apache.mesos._
 import scala.collection.JavaConverters._
 
@@ -10,19 +10,24 @@ import play.Logger
 
 
 class Executor extends org.apache.mesos.Executor {
-  def registered(driver: ExecutorDriver, executorInfo: ExecutorInfo, frameworkInfo: Protos.FrameworkInfo, slaveInfo: SlaveInfo): Unit = ???
+  private val log = Logger.of("mesos")
 
-  def reregistered(driver: ExecutorDriver, slaveInfo: SlaveInfo): Unit = ???
+  def registered(driver: ExecutorDriver,
+                 executorInfo: Protos.ExecutorInfo,
+                 frameworkInfo: Protos.FrameworkInfo,
+                 slaveInfo: Protos.SlaveInfo) {}
 
-  def disconnected(driver: ExecutorDriver): Unit = ???
+  def reregistered(driver: ExecutorDriver, slaveInfo: Protos.SlaveInfo) {}
 
-  def launchTask(driver: ExecutorDriver, task: TaskInfo): Unit = ???
+  def disconnected(driver: ExecutorDriver) {}
 
-  def killTask(driver: ExecutorDriver, taskId: TaskID): Unit = ???
+  def launchTask(driver: ExecutorDriver, task: Protos.TaskInfo) {}
 
-  def frameworkMessage(driver: ExecutorDriver, data: Array[Byte]): Unit = ???
+  def killTask(driver: ExecutorDriver, taskId: Protos.TaskID) {}
 
-  def shutdown(driver: ExecutorDriver): Unit = ???
+  def frameworkMessage(driver: ExecutorDriver, data: Array[Byte]) {}
 
-  def error(driver: ExecutorDriver, message: String): Unit = ???
+  def shutdown(driver: ExecutorDriver) {}
+
+  def error(driver: ExecutorDriver, message: String) {}
 }

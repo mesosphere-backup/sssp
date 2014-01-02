@@ -1,49 +1,44 @@
 package controllers
 
-import com.amazonaws.auth._
-import com.amazonaws.internal.StaticCredentialsProvider
-import mesosphere.sssp._
 import org.joda.time.format.ISODateTimeFormat
+import scala.concurrent.Await
 import scala.concurrent.duration._
 
 import play.Logger
-import play.api._
 import play.api.mvc._
-import models._
 import play.api.libs.json._
-import scala.concurrent.Await
-import scala.concurrent.stm._
+
+import models._
 
 
 object Application extends Controller {
-  val stores: Routes = new Routes()
   var coordinator: Option[mesos.Coordinator] = None
 
-  def index() = Action { implicit request => {
-      val jsonRequest = request.contentType
-        .map(Seq("application/json", "text/json").contains(_))
-      if (jsonRequest.getOrElse(false)) {
-        Ok(Json.prettyPrint(routesAsJson()))
-      } else {
-        Ok(views.html.index(routesAsFormChanges(), FormChange.form))
-      }
+  def index() = Action { implicit request =>
+    if (request.contentType
+               .map(Seq("application/json", "text/json").contains(_))
+               .getOrElse(false)) {
+      WebLogger.info("Displaying routes as JSON.")
+      Ok(Json.prettyPrint(Stores.routesAsJson(passwordProtect = true)))
+    } else {
+      WebLogger.info("Sending back routes as a form.")
+      Ok(views.html.index(routesAsFormChanges(), FormChange.form))
     }
   }
 
-  def handleChanges = Action { implicit request => {
-      // Chaining Actions is rather awkward.
-      val res = request.contentType match {
-        case Some("application/x-www-form-urlencoded") => handleForm(request)
-        case _                                         => handleJson(request)
-      }
-      Await.result(res, Duration.Inf)
-    }
+  def handleChanges = Action { implicit request =>
+    val b = request.contentType == Some("application/x-www-form-urlencoded") &&
+            request.body.asText.filter(_.take(1) == "{").isEmpty
+    Await.result((if (b) handleForm else handleJson)(request), Duration.Inf)
   }
 
-  def head = Action { Ok("") }
+  def head = Action { implicit request =>
+    WebLogger.info("")
+    Ok("")
+  }
 
-  def clearRoutes = Action {
-    updateRoutes(Map(), clear = true)
+  def clearRoutes = Action { implicit request =>
+    updateRoutes(Map())
     Ok("")
   }
 
@@ -51,7 +46,7 @@ object Application extends Controller {
     // TODO: Handle empty bodies
     request.body.asJson.map { json =>
       json.validate[Map[String, Change]].map { updates =>
-        updateRoutes(updates, Some(request))
+        updateRoutes(updates)
         Ok("")
       } recoverTotal(e => BadRequest("JSON Error: " + JsError.toFlatJson(e)))
     } getOrElse BadRequest("Bad JSON")
@@ -61,52 +56,22 @@ object Application extends Controller {
     FormChange.form.bindFromRequest.fold(
       errors => BadRequest(views.html.index(routesAsFormChanges(), errors)),
       form => {
-        updateRoutes(Map(form.path -> form.asChange), Some(request))
+        updateRoutes(Map(form.path -> form.asChange))
         Redirect(routes.Application.index)
       }
     )
   }
 
-  def updateRoutes(map: Map[String, Change],
-                   request: Option[Request[_]] = None,
-                   clear: Boolean = false) = {
-
-    val method = request.map(_.method)
-    val clearing = clear ||
-      method.map(m => Seq("PUT","DELETE").contains(m)).getOrElse(false)
-
-    if (clearing || method.nonEmpty)
-      Logger.info("//routes//" + method.map(" " + _).getOrElse("") +
-                                 (if (clearing) " *cleared*" else ""))
-
-    // We break in to the stores implementation here, to transactionally update
-    // the routes.
-    atomic { implicit txn =>
-      val inner: TMap[Seq[String], S3Notary] = stores.routes
-      if (clearing) inner.clear()
-      for ((s, change) <- map) {
-        val path = s.split('/').filterNot(_.isEmpty).toSeq
-        val msg = s"//routes// $s -> ${change.summary}"
-        Logger.info(request.map(r => s"${r.id} $msg").getOrElse(msg))
-
-        change match {
-          case Remove() => inner -= path
-          case AddS3(S3(bucket, access, secret)) => {
-            val creds = new BasicAWSCredentials(access, secret)
-            val provider = new StaticCredentialsProvider(creds)
-            inner += (path -> new S3Notary(bucket, provider))
-          }
-        }
-      }
-    }
-
+  def updateRoutes(changes: Map[String, Change])(implicit request: Request[_]) {
+    WebLogger.info("Altering routes.")
+    Stores.updateRoutes(changes, Seq("PUT","DELETE").contains(request.method))
     syncRoutesToCoordinator()
   }
 
   def syncRoutesFromCoordinator() = for (c <- coordinator) {
     Json.parse(c.readState()).validate[Map[String, Change]].map { updates =>
-      val current = routesAsChanges(passwordProtect = false)
-      if (current != updates) updateRoutes(updates, clear = true)
+      val current = Stores.routesAsChanges(passwordProtect = false)
+      if (current != updates) Stores.updateRoutes(updates, clearing = true)
     } recoverTotal { e =>
       Logger.error("Bad JSON from coordinator: " + JsError.toFlatJson(e))
     }
@@ -114,12 +79,12 @@ object Application extends Controller {
 
   def syncRoutesToCoordinator(onlyIfEmpty: Boolean = false) =
     for (c <- coordinator) {
-      val s = Json.stringify(routesAsJson(passwordProtect = false))
+      val s = Json.stringify(Stores.routesAsJson(passwordProtect = false))
       if (c.readState() != s) c.writeState(s, onlyIfEmpty)
     }
 
   def routesAsFormChanges(): Seq[FormChange] =
-    for ((path, notary) <- stores.toSeq) yield {
+    for ((path, notary) <- Stores.routes.toSeq) yield {
       val creds = notary.credentials.getCredentials()
       FormChange("/" + path.mkString("/"),
                  notary.bucket,
@@ -128,42 +93,42 @@ object Application extends Controller {
                  "delete")
     }
 
-  def routesAsChanges(passwordProtect: Boolean = true): Map[String, Change] =
-    for ((path, notary) <- stores.toMap) yield {
-      val creds = notary.credentials.getCredentials()
-      val s3 = if (passwordProtect) {
-        S3(notary.bucket, creds.getAWSAccessKeyId.map(_ => '•'),
-                          creds.getAWSSecretKey.map(_ => '•'))
-      } else {
-        S3(notary.bucket, creds.getAWSAccessKeyId, creds.getAWSSecretKey)
-      }
-      (("/" + path.mkString("/")) -> AddS3(s3))
-    }
-
-  def routesAsJson(passwordProtect: Boolean = true): JsValue = {
-    Json.toJson(routesAsChanges(passwordProtect).mapValues(Json.toJson(_)))
-  }
-
   def notary(s: String) = Action { implicit request =>
+    WebLogger.info("Storage request.")
     val path = s.split('/').filterNot(_.isEmpty).toSeq
-    Logger.info(s"${request.id} // ${request.method} /$s")
-    if (stores.isEmpty) ServiceUnavailable else
-      stores.deepestHandler(path) match {
+    if (Stores.routes.isEmpty) ServiceUnavailable else
+      Stores.routes.deepestHandler(path) match {
         case Some((prefix, notary)) => {
           val relative: String = path.drop(prefix.length).mkString("/")
-          Logger.info(s"${request.id} // /$s -> s3://${notary.bucket}/$relative")
+          WebLogger.info(s"*match* s3://${notary.bucket} /$relative")
           val (signed, seconds, date) =
             notary.sign(relative, request.method, request.headers.toMap)
           val formatted = ISODateTimeFormat.dateTimeNoMillis().withZoneUTC()
             .print(date.getTime)
-          Logger.info(s"${request.id} // Expires: ${seconds}s $formatted")
+          WebLogger.info(s"*expiration* ${seconds}s $formatted")
           Redirect(signed, 307)
             .withHeaders(("Cache-Control", f"max-age=${seconds - 1}"))
         }
         case None => {
-          Logger.info(s"${request.id} // /$s -> No mapping!")
+          WebLogger.info(s"No store could be found for this request.")
           Forbidden
         }
       }
+  }
+}
+
+object WebLogger {
+  val log = Logger.of("web")
+
+  def trace(s: String)(implicit request: Request[_]) = log.trace(formatted(s))
+  def debug(s: String)(implicit request: Request[_]) = log.debug(formatted(s))
+  def info( s: String)(implicit request: Request[_]) = log.info(formatted(s))
+  def warn( s: String)(implicit request: Request[_]) = log.warn(formatted(s))
+  def error(s: String)(implicit request: Request[_]) = log.error(formatted(s))
+
+  def formatted(msg: String)(implicit request: Request[_]) = if (msg != "") {
+    s"#${request.id} ${request.method} ${request.path} - $msg"
+  } else {
+    s"#${request.id} ${request.method} ${request.path}"
   }
 }

@@ -16,7 +16,7 @@ case class S3(bucket: String, access: String, secret: String)
 object Change {
   val removeString = "*delete*"
   implicit val jsonRemove = {
-    val s = "*delete*"
+    val s = removeString
     val err = ValidationError(s"Expected string '$s' for route removal.")
     val reader = __.read[String].filter(err)(_ == s).map(_ => Remove())
     val writer = new Writes[Remove] { def writes(r: Remove) = JsString(s) }
@@ -39,6 +39,5 @@ object Change {
       case AddS3(_) => jsonAddS3.writes(change.asInstanceOf[AddS3])
     }
   }
-
 }
 

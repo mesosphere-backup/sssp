@@ -3,15 +3,22 @@ package mesos
 import java.util
 import mesosphere.mesos.util.{FrameworkInfo, ScalarResource}
 import org.apache.mesos.Protos._
-import org.apache.mesos.{Protos, ExecutorDriver, Executor, SchedulerDriver}
+import org.apache.mesos.SchedulerDriver
 import scala.collection.JavaConverters._
 
 import play.Logger
+import play.Logger.ALogger
+import play.api.libs.json._
+import com.fasterxml.jackson.core.JsonParseException
+import mesos.Action.{RequestRoutes, NewRoutes}
+import models.Stores
 
 
 class Scheduler extends org.apache.mesos.Scheduler {
+  private val log: ALogger = Logger.of("mesos")
+
   def error(driver: SchedulerDriver, message: String) {
-    Logger.error(s"//mesos// $message")
+    log.error(s"$message")
   }
 
   def executorLost(driver: SchedulerDriver,
@@ -28,20 +35,31 @@ class Scheduler extends org.apache.mesos.Scheduler {
                        executorId: ExecutorID,
                        slaveId: SlaveID,
                        data: Array[Byte]) {
-    // Send configuration.
-    driver.sendFrameworkMessage()
-
+    try {
+      Json.parse(new String(data, "UTF-8")).validate[Action].map {
+        case NewRoutes(updates) => Stores.updateRoutes(updates)
+        case RequestRoutes() => {
+          val json = Stores.routesAsJson(passwordProtect = false)
+          val bytes = Json.stringify(json).getBytes("UTF-8")
+          driver.sendFrameworkMessage(executorId, slaveId, bytes)
+        }
+      } recoverTotal {
+        e => log.error("JSON message not recognized: " + JsError.toFlatJson(e))
+      }
+    } catch {
+      case e: JsonParseException => log.error("Could not parse data as JSON.")
+    }
   }
 
   def statusUpdate(driver: SchedulerDriver, status: TaskStatus) {
-    Logger.info(s"//mesos// status update: $status")
+    log.info(s"status update: $status")
   }
 
   def offerRescinded(driver: SchedulerDriver, offerId: OfferID) {}
 
   def resourceOffers(driver: SchedulerDriver, offers: util.List[Offer]) {
     for (offer <- offers.asScala) {
-      Logger.info(s"//mesos// offer received...")
+      log.info(s"offer received...")
       //
       //      val cmd = CommandInfo.newBuilder
       //        .addUris(CommandInfo.URI.newBuilder.setValue("https://gist.github.com/guenter/7470373/raw/42ed566dba6a22f1b160e9774d750e46e83b61ad/http.py"))
