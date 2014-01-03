@@ -27,6 +27,8 @@
   <!-- Loggers peculiar to SSSP. -->
   <logger name="web" level="DEBUG" />
   <logger name="mesos" level="DEBUG" />
+  <logger name="mesos.executor" level="DEBUG" />
+  <logger name="mesos.scheduler" level="DEBUG" />
   <logger name="stores" level="DEBUG" />
 
 </configuration>

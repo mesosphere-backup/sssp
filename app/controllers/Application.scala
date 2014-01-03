@@ -12,8 +12,6 @@ import models._
 
 
 object Application extends Controller {
-  var coordinator: Option[mesos.Coordinator] = None
-
   def index() = Action { implicit request =>
     if (request.contentType
                .map(Seq("application/json", "text/json").contains(_))
@@ -65,23 +63,7 @@ object Application extends Controller {
   def updateRoutes(changes: Map[String, Change])(implicit request: Request[_]) {
     WebLogger.info("Altering routes.")
     Stores.updateRoutes(changes, Seq("PUT","DELETE").contains(request.method))
-    syncRoutesToCoordinator()
   }
-
-  def syncRoutesFromCoordinator() = for (c <- coordinator) {
-    Json.parse(c.readState()).validate[Map[String, Change]].map { updates =>
-      val current = Stores.routesAsChanges(passwordProtect = false)
-      if (current != updates) Stores.updateRoutes(updates, clearing = true)
-    } recoverTotal { e =>
-      Logger.error("Bad JSON from coordinator: " + JsError.toFlatJson(e))
-    }
-  }
-
-  def syncRoutesToCoordinator(onlyIfEmpty: Boolean = false) =
-    for (c <- coordinator) {
-      val s = Json.stringify(Stores.routesAsJson(passwordProtect = false))
-      if (c.readState() != s) c.writeState(s, onlyIfEmpty)
-    }
 
   def routesAsFormChanges(): Seq[FormChange] =
     for ((path, notary) <- Stores.routes.toSeq) yield {

@@ -31,23 +31,10 @@ object Global extends GlobalSettings {
       val settingsString = Json.stringify(Json.toJson(conn))
       Logger.info(s"Mesos configuration is: $settingsString")
       val coordinator = mesos.Coordinator(conn)
-      controllers.Application.coordinator = Some(coordinator)
-      (new Thread(coordinator)).start()
+      coordinator.startSubsystems()
       Logger.info("Running state coordinator in the background.")
-      controllers.Application.syncRoutesToCoordinator(onlyIfEmpty = true)
-      (new Thread(new RouteSyncer(1 second, 10 seconds))).start()
     }
     // TODO: Don't load local config if Mesos state is non-empty.
-  }
-
-  class RouteSyncer(first: Duration, cyclic: Duration) extends Runnable {
-    def run() {
-      Thread.sleep(first.toMillis)
-      while (true) {
-        controllers.Application.syncRoutesFromCoordinator()
-        Thread.sleep(cyclic.toMillis)
-      }
-    }
   }
 
   override def onStop(app: Application) {}

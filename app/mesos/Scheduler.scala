@@ -3,19 +3,19 @@ package mesos
 import java.util
 import mesosphere.mesos.util.{FrameworkInfo, ScalarResource}
 import org.apache.mesos.Protos._
-import org.apache.mesos.SchedulerDriver
+import org.apache.mesos.{MesosSchedulerDriver, SchedulerDriver}
 import scala.collection.JavaConverters._
 
 import play.Logger
 import play.Logger.ALogger
 import play.api.libs.json._
 import com.fasterxml.jackson.core.JsonParseException
-import mesos.Action.{RequestRoutes, NewRoutes}
+import mesos.Action._
 import models.Stores
 
 
 class Scheduler extends org.apache.mesos.Scheduler {
-  private val log: ALogger = Logger.of("mesos")
+  private val log: ALogger = Logger.of("mesos.scheduler")
 
   def error(driver: SchedulerDriver, message: String) {
     log.error(s"$message")
@@ -37,12 +37,8 @@ class Scheduler extends org.apache.mesos.Scheduler {
                        data: Array[Byte]) {
     try {
       Json.parse(new String(data, "UTF-8")).validate[Action].map {
-        case NewRoutes(updates) => Stores.updateRoutes(updates)
-        case RequestRoutes() => {
-          val json = Stores.routesAsJson(passwordProtect = false)
-          val bytes = Json.stringify(json).getBytes("UTF-8")
-          driver.sendFrameworkMessage(executorId, slaveId, bytes)
-        }
+        case ExecutorJoin(s) => log.info(s"Executor joining: $s")
+        case m => log.info(s"Schedulers don't handle ${m.getClass} messages.")
       } recoverTotal {
         e => log.error("JSON message not recognized: " + JsError.toFlatJson(e))
       }
@@ -52,7 +48,7 @@ class Scheduler extends org.apache.mesos.Scheduler {
   }
 
   def statusUpdate(driver: SchedulerDriver, status: TaskStatus) {
-    log.info(s"status update: $status")
+    log.info(s"status update: ${status.getMessage}")
   }
 
   def offerRescinded(driver: SchedulerDriver, offerId: OfferID) {}
@@ -83,5 +79,22 @@ class Scheduler extends org.apache.mesos.Scheduler {
 
   def registered(driver: SchedulerDriver,
                  frameworkId: FrameworkID,
-                 masterInfo: MasterInfo) {}
+                 masterInfo: MasterInfo) {
+    log.info(s"registered as ${frameworkId.getValue}")
+  }
+}
+
+object Scheduler {
+  /**
+   * Start the scheduler.
+   * NB: Should be run in the background.
+   */
+  def run(master: String) {
+    Logger.of("mesos.scheduler").info("Starting up...")
+    val scheduler = new Scheduler()
+    val framework = FrameworkInfo("SSSP")
+    val driver = new MesosSchedulerDriver(scheduler, framework.toProto, master)
+    val status = driver.run().getValueDescriptor.getFullName
+    Logger.of("mesos.scheduler").info(s"Final status: $status")
+  }
 }
