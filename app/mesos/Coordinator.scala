@@ -1,9 +1,7 @@
 package mesos
 
-import org.apache.mesos.state.{Variable, ZooKeeperState}
-import java.util.concurrent.TimeUnit
-import mesosphere.mesos.util.FrameworkInfo
-import org.apache.mesos.MesosSchedulerDriver
+import mesosphere.mesos.util.FrameworkID
+import scala.concurrent.stm._
 
 import play.Logger
 
@@ -12,17 +10,16 @@ import play.Logger
 
 case class Coordinator(conn: Connection) {
   val log = Logger.of("mesos")
+  val frameworkIDs: Ref[Seq[FrameworkID]] = Ref(Seq[FrameworkID]())
+  val scheduler = new Scheduler(conn)
+  val executor = new Executor(conn)
 
   /**
    * Start subsystems in the background.
    */
   def startSubsystems() {
-    (new Thread(new Runnable {
-      def run() { Scheduler.run(conn.master) }
-     })).start()
-    (new Thread(new Runnable {
-      def run() { Executor.run(conn.master) }
-     })).start()
+    new Thread(scheduler).start()
+    // new Thread(executor).start()
   }
 }
 

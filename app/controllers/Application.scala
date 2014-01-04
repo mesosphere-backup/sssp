@@ -1,14 +1,20 @@
 package controllers
 
+import java.io.{File, PipedOutputStream, PipedInputStream, InputStream}
 import org.joda.time.format.ISODateTimeFormat
 import scala.concurrent.Await
 import scala.concurrent.duration._
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.sys.process._
 
+import play.api.Play
 import play.Logger
 import play.api.mvc._
 import play.api.libs.json._
+import play.api.libs.iteratee._
 
 import models._
+import scala.util.Random
 
 
 object Application extends Controller {
@@ -19,8 +25,15 @@ object Application extends Controller {
       WebLogger.info("Displaying routes as JSON.")
       Ok(Json.prettyPrint(Stores.routesAsJson(passwordProtect = true)))
     } else {
-      WebLogger.info("Sending back routes as a form.")
-      Ok(views.html.index(routesAsFormChanges(), FormChange.form))
+      if (request.headers.toMap.contains("GetDistribution")) {
+        WebLogger.info("Providing tarball of running application.")
+        val f: File = tgzSelf()
+        Ok.sendFile(f, fileName = _ => "sssp.tgz", onClose = () => f.delete())
+          .as("application/x-gzip")
+      } else {
+        WebLogger.info("Sending back routes as a form.")
+        Ok(views.html.index(routesAsFormChanges(), FormChange.form))
+      }
     }
   }
 
@@ -62,7 +75,7 @@ object Application extends Controller {
 
   def updateRoutes(changes: Map[String, Change])(implicit request: Request[_]) {
     WebLogger.info("Altering routes.")
-    Stores.updateRoutes(changes, Seq("PUT","DELETE").contains(request.method))
+    Stores.updateRoutes(changes, Seq("PUT", "DELETE").contains(request.method))
   }
 
   def routesAsFormChanges(): Seq[FormChange] =
@@ -96,6 +109,16 @@ object Application extends Controller {
           Forbidden
         }
       }
+  }
+
+  def tgzSelf(): File = {
+    import play.api.Play.current
+    val cwd = Play.application.path.getCanonicalPath
+    val tmp = s"/tmp/sssp-${Random.nextLong().abs}%016x.tgz"
+    val tar = Seq("tar", "-C", cwd, "-czf", tmp, ".")
+    val ext = tar ! ProcessLogger(Logger.info(_), Logger.warn(_))
+    if (ext != 0) Logger.warn(s"Bad exit code ($ext): $tar")
+    new File(tmp)
   }
 }
 

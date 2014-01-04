@@ -2,9 +2,6 @@ package mesos
 
 import com.fasterxml.jackson.core.JsonParseException
 import org.apache.mesos._
-import org.joda.time._
-import org.joda.time.format.ISODateTimeFormat
-import scala.util.Random
 
 import play.Logger
 import play.api.libs.json.{JsError, Json}
@@ -13,18 +10,16 @@ import models.Stores
 import mesos.Action._
 
 
-class Executor extends org.apache.mesos.Executor {
+class Executor(val conn: Connection)
+    extends org.apache.mesos.Executor with Runnable {
   private val log = Logger.of("mesos.executor")
-  val id = {
-    val now = new DateTime(DateTimeZone.UTC)
-    val fmt = ISODateTimeFormat.basicDateTime().withZoneUTC().print(now)
-    f"$fmt#${Random.nextInt().abs}%08x"
-  }
 
   def registered(driver: ExecutorDriver,
                  executorInfo: Protos.ExecutorInfo,
                  frameworkInfo: Protos.FrameworkInfo,
-                 slaveInfo: Protos.SlaveInfo) {}
+                 slaveInfo: Protos.SlaveInfo) {
+    log.info(s"registered as: ${executorInfo.getExecutorId.getValue}")
+  }
 
   def reregistered(driver: ExecutorDriver, slaveInfo: Protos.SlaveInfo) {}
 
@@ -59,17 +54,15 @@ class Executor extends org.apache.mesos.Executor {
   def shutdown(driver: ExecutorDriver) {}
 
   def error(driver: ExecutorDriver, message: String) {}
-}
 
-object Executor {
   /**
    * Start the executor.
    * NB: Should be run in the background.
    */
-  def run(master: String) {
-    Logger.of("mesos.executor").info("Starting up...")
-    val driver = new MesosExecutorDriver(new Executor())
+  def run() {
+    log.info("Starting up...")
+    val driver = new MesosExecutorDriver(this)
     val status = driver.run().getValueDescriptor.getFullName
-    Logger.of("mesos.executor").info(s"final status: $status")
+    log.info(s"final status: $status")
   }
 }

@@ -1,5 +1,4 @@
-import java.io.File
-import scala.concurrent.duration._
+import java.io._
 import scala.io.Source
 
 import play.api._
@@ -28,14 +27,14 @@ object Global extends GlobalSettings {
 
     for (m <- optionalMesosSettings) {
       val conn = mesos.Connection.fromConfig(m)
-      val settingsString = Json.stringify(Json.toJson(conn))
-      Logger.info(s"Mesos configuration is: $settingsString")
+      Logger.info(s"Mesos master: ${conn.master}")
       val coordinator = mesos.Coordinator(conn)
       coordinator.startSubsystems()
-      Logger.info("Running state coordinator in the background.")
     }
     // TODO: Don't load local config if Mesos state is non-empty.
   }
 
   override def onStop(app: Application) {}
+
+
 }
