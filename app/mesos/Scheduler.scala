@@ -5,18 +5,18 @@ import java.util
 import mesosphere.mesos.util.{FrameworkInfo, ScalarResource}
 import org.apache.mesos.Protos._
 import org.apache.mesos.{MesosSchedulerDriver, SchedulerDriver}
+import org.joda.time.DateTime
+import org.joda.time.format.DateTimeFormat
 import scala.collection.JavaConverters._
 import scala.concurrent.stm._
+import scala.util.Random
 
+import play.api.libs.json._
 import play.Logger
 import play.Logger.ALogger
-import play.api.libs.json._
 
 import mesos.Action._
 import models.Stores
-import org.joda.time.{DateTimeZone, DateTime}
-import org.joda.time.format.{DateTimeFormat, ISODateTimeFormat}
-import scala.util.Random
 
 
 class Scheduler(val conn: Connection)
@@ -47,8 +47,7 @@ class Scheduler(val conn: Connection)
         case ExecutorJoin(s) => {
           log.info(s"Executor joining: $s")
           val act = NewRoutes(Stores.routesAsChanges(passwordProtect = false))
-          val bytes = Json.stringify(Json.toJson(act)).getBytes("UTF-8")
-          driver.sendFrameworkMessage(executorId, slaveId, bytes)
+          driver.sendFrameworkMessage(executorId, slaveId, act)
         }
         case m => log.info(s"Schedulers don't handle ${m.getClass} messages.")
       } recoverTotal {
@@ -68,18 +67,26 @@ class Scheduler(val conn: Connection)
   def resourceOffers(driver: SchedulerDriver, offers: util.List[Offer]) {
     for (offer <- offers.asScala.take(1)) {
       log.info(s"offer received: ${offer.getId.getValue}")
-      val cmd = CommandInfo.newBuilder.setValue("sleep 60")
-      // .addUris(CommandInfo.URI.newBuilder.setValue(
-      // s"http://$adminUser:$oneTimepass@${Play.ip}:${Play.port}/sssp.tgz"
-      // ))
+
+      val dist = controllers.Application.freshSelfDownloadURL()
+      val sh = Seq( s"curl -sSfL $dist --output sssp.dist",
+                    s"tar --strip-components 1 -xf sssp.dist",
+                    s"rm -f sssp.dist RUNNING_PID",
+                    s"touch conf/executor",
+                    s"bin/sssp" ).mkString(" && ")
+      val cmd = CommandInfo.newBuilder.setValue(sh)
+
       val id = {
         val fmt = DateTimeFormat
           .forPattern("yyyyMMDD'T'HHmmss.SSS'Z'").withZoneUTC
         f"sssp-${fmt.print(new DateTime)}-${Random.nextInt().abs}%08x"
       }
 
+      val executor = ExecutorInfo.newBuilder()
+        .setCommand(cmd).setExecutorId(ExecutorID.newBuilder().setValue(id))
+
       val task = TaskInfo.newBuilder
-        .setCommand(cmd)
+        .setExecutor(executor)
         .setName(id)
         .setTaskId(TaskID.newBuilder.setValue(id))
         .addAllResources(resources())

@@ -41,4 +41,13 @@ object Action {
       case a@RequestRoutes() => RequestRoutes.json.writes(a)
     }
   }
+
+  /**
+   * Turn an action in to bytes. Used for serializing framework messages.
+   * @param a An action to serialize
+   * @return  Bytes of JSON-serialized action
+   */
+  implicit def bytes(a: Action): Array[Byte] = {
+    Json.stringify(Json.toJson(a)).getBytes("UTF-8")
+  }
 }

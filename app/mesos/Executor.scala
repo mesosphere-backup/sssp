@@ -19,6 +19,8 @@ class Executor(val conn: Connection)
                  frameworkInfo: Protos.FrameworkInfo,
                  slaveInfo: Protos.SlaveInfo) {
     log.info(s"registered as: ${executorInfo.getExecutorId.getValue}")
+    val act = ExecutorJoin(executorInfo.getExecutorId.getValue)
+    driver.sendFrameworkMessage(act)
   }
 
   def reregistered(driver: ExecutorDriver, slaveInfo: Protos.SlaveInfo) {}
@@ -29,26 +31,24 @@ class Executor(val conn: Connection)
 
   def killTask(driver: ExecutorDriver, taskId: Protos.TaskID) {}
 
-  def frameworkMessage(driver: ExecutorDriver, data: Array[Byte]) {
-    try {
-      Json.parse(new String(data, "UTF-8")).validate[Action].map {
-        case NewRoutes(updates) => {
-          log.info("Updating routes.")
-          Stores.updateRoutes(updates)
-        }
-        case RequestRoutes() => {
-          log.info("Responding to request for up-to-date routes.")
-          val json = Stores.routesAsJson(passwordProtect = false)
-          val bytes = Json.stringify(json).getBytes("UTF-8")
-          driver.sendFrameworkMessage(bytes)
-        }
-        case m => log.info(s"Executors don't handle ${m.getClass} messages.")
-      } recoverTotal {
-        e => log.error("JSON message not recognized: " + JsError.toFlatJson(e))
+  def frameworkMessage(driver: ExecutorDriver, data: Array[Byte]) = try {
+    Json.parse(new String(data, "UTF-8")).validate[Action].map {
+      case NewRoutes(updates) => {
+        log.info("Updating routes.")
+        Stores.updateRoutes(updates)
       }
-    } catch {
-      case e: JsonParseException => log.error("Could not parse data as JSON.")
+      case RequestRoutes() => {
+        log.info("Responding to request for up-to-date routes.")
+        val json = Stores.routesAsJson(passwordProtect = false)
+        val bytes = Json.stringify(json).getBytes("UTF-8")
+        driver.sendFrameworkMessage(bytes)
+      }
+      case m => log.info(s"Executors don't handle ${m.getClass} messages.")
+    } recoverTotal {
+      e => log.error("JSON message not recognized: " + JsError.toFlatJson(e))
     }
+  } catch {
+    case e: JsonParseException => log.error("Could not parse data as JSON.")
   }
 
   def shutdown(driver: ExecutorDriver) {}

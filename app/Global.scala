@@ -29,7 +29,7 @@ object Global extends GlobalSettings {
       val conn = mesos.Connection.fromConfig(m)
       Logger.info(s"Mesos master: ${conn.master}")
       val coordinator = mesos.Coordinator(conn)
-      coordinator.startSubsystems()
+      coordinator.start()
     }
     // TODO: Don't load local config if Mesos state is non-empty.
   }

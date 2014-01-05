@@ -3,10 +3,9 @@ package mesos
 import mesosphere.mesos.util.FrameworkID
 import scala.concurrent.stm._
 
-import play.Logger
+import play.api.Play.current
+import play.{Play, Logger}
 
-// becomeScheduler
-// frameworkId
 
 case class Coordinator(conn: Connection) {
   val log = Logger.of("mesos")
@@ -17,9 +16,12 @@ case class Coordinator(conn: Connection) {
   /**
    * Start subsystems in the background.
    */
-  def startSubsystems() {
-    new Thread(scheduler).start()
-    // new Thread(executor).start()
+  def start() {
+    if (Play.application().getFile("conf/executor").exists()) {
+      new Thread(executor).start()
+    } else {
+      new Thread(scheduler).start()
+    }
   }
 }
 
