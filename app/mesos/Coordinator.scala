@@ -20,11 +20,15 @@ object Coordinator {
    */
   def start() = connection match {
     case Some(conn) => {
-      if (Play.application.getFile("conf/mesos/executor").exists()) {
+      val conf = "conf/mesos/"
+      val executorFile = Play.application.getFile(s"$conf/executor").exists()
+      val schedulerFile = Play.application.getFile(s"$conf/scheduler").exists()
+      if (executorFile) {
         val e = new Executor(conn)
         new Thread(e).start()
         executor = Some(e)
-      } else {
+      }
+      if (schedulerFile || ! executorFile) {
         val s = new Scheduler(conn)
         new Thread(s).start()
         scheduler = Some(s)
