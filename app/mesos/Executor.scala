@@ -10,7 +10,7 @@ import models.Stores
 import mesos.Action._
 
 
-class Executor(val conn: Connection)
+class Executor(val conn: Conf)
     extends org.apache.mesos.Executor with Runnable {
   private val log = Logger.of("mesos.executor")
 
@@ -19,7 +19,11 @@ class Executor(val conn: Connection)
                  frameworkInfo: Protos.FrameworkInfo,
                  slaveInfo: Protos.SlaveInfo) {
     log.info(s"registered as: ${executorInfo.getExecutorId.getValue}")
-    val act = ExecutorJoin(executorInfo.getExecutorId.getValue)
+    val listener = util.Listener.guess()
+    val act = ExecutorJoin(executorInfo.getExecutorId.getValue,
+                           listener.hostname,
+                           listener.ip,
+                           listener.port)
     driver.sendFrameworkMessage(act)
   }
 

@@ -3,25 +3,36 @@ package mesos
 import mesosphere.mesos.util.FrameworkID
 import scala.concurrent.stm._
 
+import play.api.Play
 import play.api.Play.current
-import play.{Play, Logger}
+import play.Logger
 
 
-case class Coordinator(conn: Connection) {
+object Coordinator {
   val log = Logger.of("mesos")
   val frameworkIDs: Ref[Seq[FrameworkID]] = Ref(Seq[FrameworkID]())
-  val scheduler = new Scheduler(conn)
-  val executor = new Executor(conn)
+  var connection: Option[Conf] = None
+  var scheduler: Option[Scheduler] = None
+  var executor: Option[Executor] = None
 
   /**
    * Start subsystems in the background.
    */
-  def start() {
-    if (Play.application().getFile("conf/executor").exists()) {
-      new Thread(executor).start()
-    } else {
-      new Thread(scheduler).start()
+  def start() = connection match {
+    case Some(conn) => {
+      if (Play.application.getFile("conf/mesos/executor").exists()) {
+        val e = new Executor(conn)
+        new Thread(e).start()
+        executor = Some(e)
+      } else {
+        val s = new Scheduler(conn)
+        new Thread(s).start()
+        scheduler = Some(s)
+      }
     }
+    case None => throw new RuntimeException(
+      "It is not possible to start the coordinator without Mesos settings."
+    )
   }
 }
 

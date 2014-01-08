@@ -8,7 +8,8 @@ import models._
 sealed trait Action
 
 object Action {
-  case class ExecutorJoin(executor: String) extends Action
+  case class ExecutorJoin(id: String, hostname: String, ip: String, port: Int)
+    extends Action
   object ExecutorJoin { val json = Json.format[ExecutorJoin] }
 
   case class NewRoutes(update: Map[String, Change]) extends Action
@@ -36,9 +37,9 @@ object Action {
     }
 
     def writes(action: Action): JsValue = action match {
-      case a@ExecutorJoin(_) => ExecutorJoin.json.writes(a)
-      case a@NewRoutes(_)    => NewRoutes.json.writes(a)
-      case a@RequestRoutes() => RequestRoutes.json.writes(a)
+      case a@ExecutorJoin(_, _, _, _) => ExecutorJoin.json.writes(a)
+      case a@NewRoutes(_)             => NewRoutes.json.writes(a)
+      case a@RequestRoutes()          => RequestRoutes.json.writes(a)
     }
   }
 

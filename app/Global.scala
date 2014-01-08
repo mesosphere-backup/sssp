@@ -26,12 +26,11 @@ object Global extends GlobalSettings {
                                     .filterNot(_.underlying.entrySet().isEmpty)
 
     for (m <- optionalMesosSettings) {
-      val conn = mesos.Connection.fromConfig(m)
+      val conn = mesos.Conf.fromConfig(m).get
       Logger.info(s"Mesos master: ${conn.master}")
-      val coordinator = mesos.Coordinator(conn)
-      coordinator.start()
+      mesos.Coordinator.connection = Some(conn)
+      mesos.Coordinator.start()
     }
-    // TODO: Don't load local config if Mesos state is non-empty.
   }
 
   override def onStop(app: Application) {}

@@ -12,17 +12,23 @@ import scala.concurrent.stm._
 import scala.util.Random
 
 import play.api.libs.json._
+import play.api.Play
+import play.api.Play.current
 import play.Logger
 import play.Logger.ALogger
 
 import mesos.Action._
 import models.Stores
+import scala.io.Source
 
 
-class Scheduler(val conn: Connection)
+class Scheduler(val conn: Conf)
     extends org.apache.mesos.Scheduler with Runnable {
   private val log: ALogger = Logger.of("mesos.scheduler")
   val idList: Ref[Seq[FrameworkID]] = Ref(Seq[FrameworkID]())
+  val nodes: TMap[String, Node] = TMap()
+  val deadNodes: TMap[String, Node] = TMap() // TODO: Track a few dead nodes.
+  var driver: SchedulerDriver = null
 
   def error(driver: SchedulerDriver, message: String) {
     log.error(s"$message")
@@ -44,8 +50,12 @@ class Scheduler(val conn: Connection)
                        data: Array[Byte]) {
     try {
       Json.parse(new String(data, "UTF-8")).validate[Action].map {
-        case ExecutorJoin(s) => {
-          log.info(s"Executor joining: $s")
+        case ExecutorJoin(id, hostname, ip, port) => {
+          log.info(s"Executor joining: $ip:$port")
+          nodes.single += (id -> ExecutorNode(executorId.getValue,
+                                              hostname,
+                                              ip, port,
+                                              slaveId.getValue))
           val act = NewRoutes(Stores.routesAsChanges(passwordProtect = false))
           driver.sendFrameworkMessage(executorId, slaveId, act)
         }
@@ -65,16 +75,22 @@ class Scheduler(val conn: Connection)
   def offerRescinded(driver: SchedulerDriver, offerId: OfferID) {}
 
   def resourceOffers(driver: SchedulerDriver, offers: util.List[Offer]) {
-    for (offer <- offers.asScala.take(1)) {
-      log.info(s"offer received: ${offer.getId.getValue}")
+    for (offer <- offers.asScala.take(conn.nodes - nodes.single.size)) {
+      log.info(s"handling offer: ${offer.getId.getValue}")
+
+      val port: Long = offer.getResourcesList.asScala
+        .filter(_.getName == "ports")
+        .filter(_.getType == Value.Type.RANGES)
+        .toSeq
+        .map(_.getRanges.getRangeList.asScala.map(_.getBegin).take(1))
+        .take(1).flatten
+        .head // It is an error if there are no ports available...
 
       val dist = controllers.Application.freshSelfDownloadURL()
-      val sh = Seq( s"curl -sSfL $dist --output sssp.dist",
-                    s"tar --strip-components 1 -xf sssp.dist",
-                    s"rm -f sssp.dist RUNNING_PID",
-                    s"touch conf/executor",
-                    s"bin/sssp" ).mkString(" && ")
-      val cmd = CommandInfo.newBuilder.setValue(sh)
+      val env = s"export DIST=$dist PORT=$port SSSP_MESOS_MODE=executor"
+      val script = Play.application.getFile("conf/sssp-for-mesos")
+      val cmd = CommandInfo.newBuilder
+        .setValue("set -x && " + env + " &&\n" + Source.fromFile(script, "UTF-8").mkString)
 
       val id = {
         val fmt = DateTimeFormat
@@ -85,11 +101,20 @@ class Scheduler(val conn: Connection)
       val executor = ExecutorInfo.newBuilder()
         .setCommand(cmd).setExecutorId(ExecutorID.newBuilder().setValue(id))
 
+      val portResource = Resource.newBuilder()
+        .setName("ports")
+        .setType(Value.Type.RANGES)
+        .setRanges(Value.Ranges.newBuilder()
+        .addRange(Value.Range.newBuilder()
+        .setBegin(port).setEnd(port)))
+        .build
+
       val task = TaskInfo.newBuilder
         .setExecutor(executor)
         .setName(id)
         .setTaskId(TaskID.newBuilder.setValue(id))
         .addAllResources(resources())
+        .addResources(portResource)
         .setSlaveId(offer.getSlaveId)
         .build
 
@@ -97,7 +122,10 @@ class Scheduler(val conn: Connection)
     }
   }
 
-  def reregistered(driver: SchedulerDriver, masterInfo: MasterInfo) {}
+  def reregistered(driver: SchedulerDriver, masterInfo: MasterInfo) {
+    log.info(s"reregistered")
+    this.driver = driver
+  }
 
   def registered(driver: SchedulerDriver,
                  frameworkId: FrameworkID,
@@ -105,13 +133,10 @@ class Scheduler(val conn: Connection)
     log.info(s"registered as ${frameworkId.getValue}")
     idList.single.transform(_ :+ frameworkId)
     log.info(s"${idList.single.get}")
-
-    //val request = Request.newBuilder().addAllResources(resources()).build()
-    //driver.requestResources(Seq(request).asJava)
-    // The above line results in a SIGSEGV (something about JNI and reflection)
+    this.driver = driver
   }
 
-  def resources() = Seq(
+  def resources(): util.List[Resource] = Seq(
     ScalarResource("cpus", conn.cpus),
     ScalarResource("mem", conn.mem)
   ).map(_.toProto).asJava
@@ -126,5 +151,13 @@ class Scheduler(val conn: Connection)
      new MesosSchedulerDriver(this, FrameworkInfo("SSSP").toProto, conn.master)
     val status = driver.run().getValueDescriptor.getFullName
     log.info(s"Final status: $status")
+  }
+
+  def syncRoutes() {
+    val act = NewRoutes(Stores.routesAsChanges(passwordProtect = false))
+    for ((_, ExecutorNode(id, _, _, _, slave)) <- nodes.single)
+      driver.sendFrameworkMessage(ExecutorID.newBuilder().setValue(id).build(),
+                                  SlaveID.newBuilder().setValue(slave).build(),
+                                  act)
   }
 }

@@ -1,0 +1,11 @@
+curl -sSfL "${DIST-http://downloads.mesosphere.io/sssp/sssp.tgz}" -o dist &&
+tar --strip-components 1 -xf dist && rm -f dist RUNNING_PID &&
+mkdir -p conf/mesos &&
+case "${SSSP_MESOS_MODE-scheduler}" in
+  executor)       touch conf/mesos/executor ;;
+  scheduler)      touch conf/mesos/executor conf/mesos/scheduler ;;
+  only-scheduler) touch conf/mesos/scheduler ;;
+  *)              echo "Bad mode: '$SSSP_MESOS_MODE'" >&2 ; exit 2 ;;
+esac &&
+bin/sssp -Dhttp.port=${PORT-9000}
+

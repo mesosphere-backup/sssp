@@ -1,28 +1,23 @@
 package controllers
 
 import java.io.File
-import java.net.InetAddress
 import org.joda.time.format.ISODateTimeFormat
 import scala.concurrent.Await
 import scala.concurrent.duration._
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.sys.process._
+import scala.util.Random
 import sun.misc.BASE64Decoder
 
 import play.api.Play
 import play.api.Play.current
 import play.api.mvc._
-import play.api.libs.json._
+import play.api.libs.json.{Json, JsError}
 import play.Logger
 
 import models._
-import scala.util.Random
 
 
 object Application extends Controller {
-  // TODO: configurable self-download credentials
-  val (distUser, distPass) = ("sssp-download", "the-rain-in-spain")
-
   def index() = Action { implicit request =>
     if (request.contentType
                .map(Seq("application/json", "text/json").contains(_))
@@ -30,7 +25,7 @@ object Application extends Controller {
       WebLogger.info("Displaying routes as JSON.")
       Ok(Json.prettyPrint(Stores.routesAsJson(passwordProtect = true)))
     } else {
-      if (basicAuth() == Some((distUser, distPass))) {
+      if (basicAuth() == Some((Dist.user, Dist.pass))) {
         WebLogger.info("Providing tarball of running application.")
         val f: File = distSelf()
         def delete() {
@@ -85,6 +80,7 @@ object Application extends Controller {
   def updateRoutes(changes: Map[String, Change])(implicit request: Request[_]) {
     WebLogger.info("Altering routes.")
     Stores.updateRoutes(changes, Seq("PUT", "DELETE").contains(request.method))
+    mesos.Coordinator.scheduler.foreach(_.syncRoutes())
   }
 
   def routesAsFormChanges(): Seq[FormChange] =
@@ -150,20 +146,8 @@ object Application extends Controller {
   }
 
   def freshSelfDownloadURL(): String = {
-    val (host, port) = guessListener()
-    s"http://$distUser:$distPass@$host:$port/"
-  }
-
-  /**
-   * Try to guess which host and port we're listening on. Needed for
-   * self-download of SSSP.
-   * @return host, port pair as strings
-   */
-  def guessListener(): (String, String) = {
-    val port = Option(System.getProperty("http.port")).getOrElse("9000")
-    val host = Option(System.getProperty("http.address"))
-      .getOrElse(InetAddress.getLocalHost().getHostAddress())
-    (host, port)
+    val listener = util.Listener.guess()
+    s"http://${Dist.user}:${Dist.pass}@${listener.ip}:${listener.port}/"
   }
 }
 
