@@ -7,12 +7,13 @@ import play.Logger
 import play.api.libs.json.{JsError, Json}
 
 import models.Stores
-import mesos.Action._
+import mesos.Message._
 
 
 class Executor(val conn: Conf)
     extends org.apache.mesos.Executor with Runnable {
   private val log = Logger.of("mesos.executor")
+  var coordinatorWebEndpoint: Option[(String, Int)] = None
 
   def registered(driver: ExecutorDriver,
                  executorInfo: Protos.ExecutorInfo,
@@ -36,7 +37,10 @@ class Executor(val conn: Conf)
   def killTask(driver: ExecutorDriver, taskId: Protos.TaskID) {}
 
   def frameworkMessage(driver: ExecutorDriver, data: Array[Byte]) = try {
-    Json.parse(new String(data, "UTF-8")).validate[Action].map {
+    Json.parse(new String(data, "UTF-8")).validate[Message].map {
+      case NewCoordinator(host, port) => {
+        coordinatorWebEndpoint = Some((host, port))
+      }
       case NewRoutes(updates) => {
         log.info("Updating routes.")
         Stores.updateRoutes(updates)

@@ -23,6 +23,14 @@
                 height: 100%;
                 margin: 0 0 25% 25%;
             }
+            table {
+                border-spacing: 0;
+                border-collapse: collapse;
+                margin: 0.5em 0;
+            }
+            #routes, #mesos-tasks {
+                margin: auto;
+            }
             input {
                 width: 100%;
             }
@@ -35,9 +43,6 @@
                 font-family: monospace !important;
                 background: white;
                 border: none;
-            }
-            #routes, #cluster {
-                margin: auto;
             }
             h1,h2,h3,h4,h5,h6 {
                 font-style: italic;
@@ -52,13 +57,30 @@
                 font-size: 500%;
             }
             h2 {
-              font-size: 160%;
+                font-size: 160%;
             }
             td {
                 padding: 0 4px;
             }
             th {
-              font-weight: normal;
+                font-weight: normal;
+            }
+            #mesos-tasks td {
+                border-top: solid thin #ccc;
+            }
+            #mesos-tasks th, #mesos-tasks td {
+                border-left: solid thin #ccc;
+                padding: 0.5em;
+            }
+            #mesos-tasks th:first-child, #mesos-tasks td:first-child {
+                border-left: none;
+                padding-left: 1em;
+            }
+            #mesos-tasks th:last-child, #mesos-tasks td:last-child {
+                padding-right: 1em;
+            }
+            #mesos-conf, #mesos-conf table {
+                width: 100%;
             }
         </style>
     </head>

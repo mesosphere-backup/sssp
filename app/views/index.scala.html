@@ -1,5 +1,6 @@
 @(formChanges: Seq[FormChange], changeForm: Form[FormChange])
 @import helper._
+@import mesos.Coordinator
 
 @main("SSSP") {
     <div id="container">
@@ -14,8 +15,8 @@
         </tr>
         </thead>
         <tbody>
-        <tr>
-        @form(routes.Application.handleChanges, 'class -> "create") {
+        <tr> <form class="create" method="POST">
+        @form(routes.Application.index, 'class -> "create") {
             <td><input type="text" name="path"
                        size=25 required autofocus
                        placeholder="new route"></td>
@@ -30,10 +31,10 @@
                        placeholder="secret key"></td>
             <td><input type="submit" name="action" value="create"></td>
         }
-        </tr>
+        </form> </tr>
         @for(change <- formChanges) {
-        <tr>
-        @form(routes.Application.handleChanges, 'class -> "delete") {
+        <tr> <form class="delete" method="POST">
+        @form(routes.Application.index, 'class -> "delete") {
             <td><input type="text" name="path"
                        size=25 readonly
                        value="@change.path"></td>
@@ -48,29 +49,46 @@
                        value="@change.secret"></td>
             <td><input type="submit" name="action" value="delete"></td>
         }
-        </tr>
+        </form> </tr>
         }
         </tbody>
     </table>
-    @if(true) {
+    @for(conf <- Coordinator.conf) {
     <div style="width: 100%; height: 2em;"></div>
     <h2>cluster</h2>
-    <table id="cluster">
+    <form id="mesos-conf" method="POST">
+        <table>
+            <thead>
+                <tr><th>Master URL</th><th>Node Count</th>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>
+                        <input type="text" name="mesos-master" readonly size="50"
+                               value="@conf.master">
+                    </td>
+                    <td>
+                        <input type="number" name="mesos-nodes" readonly size="4"
+                               value="@conf.nodes">
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </form>
+    }
+    @if(Coordinator.scheduler.nonEmpty) {
+    <table id="mesos-tasks">
         <thead>
         <tr>
-            <th>Hostname</th>
             <th>IP</th>
             <th>Port</th>
             <th>Role</th>
         </tr>
         </thead>
         <tbody>
-        <tr>
-            <td>a</td>
-            <td>1.1.1.1</td>
-            <td>90</td>
-            <td>scheduler/executor</td>
-        </tr>
+        @for((ip, port, kind) <- controllers.Application.endpoints()) {
+        <tr> <td>@ip</td> <td>@port</td> <td>@kind</td> </tr>
+        }
         </tbody>
     </table>
     }

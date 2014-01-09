@@ -1,8 +1,8 @@
 GET     /                           controllers.Application.index
-PUT     /                           controllers.Application.handleChanges
-POST    /                           controllers.Application.handleChanges
-HEAD    /                           controllers.Application.head
-DELETE  /                           controllers.Application.clearRoutes
+PUT     /                           controllers.Application.index
+POST    /                           controllers.Application.index
+HEAD    /                           controllers.Application.index
+DELETE  /                           controllers.Application.index
 
 GET     /*s                         controllers.Application.notary(s)
 PUT     /*s                         controllers.Application.notary(s)

@@ -1,24 +1,76 @@
 package controllers
 
-import java.io.File
+import com.ning.http.{client => ning}
+import java.io.{Serializable, File}
 import org.joda.time.format.ISODateTimeFormat
-import scala.concurrent.Await
-import scala.concurrent.duration._
+import scala.collection.JavaConverters._
+import scala.concurrent.ExecutionContext.Implicits.global
 import scala.sys.process._
 import scala.util.Random
 import sun.misc.BASE64Decoder
 
+import play.api.libs.json.{Json, JsError}
+import play.api.mvc._
 import play.api.Play
 import play.api.Play.current
-import play.api.mvc._
-import play.api.libs.json.{Json, JsError}
 import play.Logger
 
 import models._
+import util.Listener
+import scala.concurrent.duration.Duration
+import scala.concurrent.Await
 
 
 object Application extends Controller {
-  def index() = Action { implicit request =>
+  def proxy(): Option[(String, Int)] = mesos.Coordinator.executor match {
+    case Some(e) if mesos.Coordinator.scheduler.isEmpty => {
+      Some(e.coordinatorWebEndpoint.get)
+    }
+    case _ => None
+  }
+
+  def bytesIfProxying(headers: RequestHeader): BodyParser[AnyContent] =
+    if (proxy().nonEmpty) {
+      parse.raw.map(AnyContentAsRaw(_))
+    } else parse.anyContent
+
+  def index = Action(parse.using(bytesIfProxying)) { implicit request =>
+    val action = mesos.Coordinator.executor match {
+      case Some(e) if mesos.Coordinator.scheduler.isEmpty => {
+        WebLogger.info("Proxying to scheduler.")
+        val response = e.coordinatorWebEndpoint match {
+          case None => InternalServerError
+          case Some((host, port)) => {
+            val config = new ning.AsyncHttpClientConfig.Builder()
+              .setUserAgent("SSSPExecutor").build
+            val client = new ning.AsyncHttpClient(config)
+            val req = requestToNingRequest(s"$host:$port", request)
+            WebLogger.info(s"Proxying: ${req.getMethod} ${req.getOriginalURI}")
+            val res: ning.Response = client.prepareRequest(req).execute().get()
+            WebLogger.info("Response received.")
+            resultFromNingReponse(res)
+          }
+        }
+        Action { response }
+      }
+      case _ => {
+        WebLogger.info("Handling administrative request.")
+        request.method match {
+          case "GET"    => routeRootGets
+          case "PUT"    => handleChanges
+          case "POST"   => handleChanges
+          case "HEAD"   => head
+          case "DELETE" => clearRoutes
+        }
+      }
+    }
+    Await.result(action(request), Duration.Inf)
+  }
+
+  /** A sadly, a quite fancy method. Other paths are supposed to be proxied to
+   *  S3, so the root needs to serve a few different purposes.
+   */
+  def routeRootGets: Action[AnyContent] = Action { implicit request =>
     if (request.contentType
                .map(Seq("application/json", "text/json").contains(_))
                .getOrElse(false)) {
@@ -41,10 +93,10 @@ object Application extends Controller {
     }
   }
 
-  def handleChanges = Action { implicit request =>
+  def handleChanges = Action.async { implicit request =>
     val b = request.contentType == Some("application/x-www-form-urlencoded") &&
             request.body.asText.filter(_.take(1) == "{").isEmpty
-    Await.result((if (b) handleForm else handleJson)(request), Duration.Inf)
+    (if (b) handleForm else handleJson)(request)
   }
 
   def head = Action { implicit request =>
@@ -58,6 +110,7 @@ object Application extends Controller {
   }
 
   def handleJson: Action[AnyContent] = Action { implicit request =>
+    WebLogger.info("Handling JSON request.")
     // TODO: Handle empty bodies
     request.body.asJson.map { json =>
       json.validate[Map[String, Change]].map { updates =>
@@ -68,6 +121,7 @@ object Application extends Controller {
   }
 
   def handleForm = Action { implicit request =>
+    WebLogger.info("Handling HTML form.")
     FormChange.form.bindFromRequest.fold(
       errors => BadRequest(views.html.index(routesAsFormChanges(), errors)),
       form => {
@@ -117,6 +171,14 @@ object Application extends Controller {
     }
   }
 
+  def endpoints(): Seq[(String, Int, String)] = {
+    val nodes = mesos.Coordinator.scheduler
+      .map(_.nodes.single.values).getOrElse(Seq())
+    val other = for (node <- nodes) yield (node.ip, node.port, node.kind)
+    val me = Listener.guess()
+    (me.ip, me.port, "scheduler") +: other.toSeq
+  }
+
   def basicAuth()(implicit request: Request[_]): Option[(String, String)] = {
     val Basic = "^ *Basic +([^ ].+)$".r
     for {
@@ -148,6 +210,27 @@ object Application extends Controller {
   def freshSelfDownloadURL(): String = {
     val listener = util.Listener.guess()
     s"http://${Dist.user}:${Dist.pass}@${listener.ip}:${listener.port}/"
+  }
+
+  def requestToNingRequest(targetHost: String,
+                           request: Request[AnyContent]): ning.Request = {
+    val body = request.body.asRaw.flatMap(_.asBytes()).getOrElse(Array())
+    new ning.RequestBuilder(request.method)
+      .setUrl("http://" + targetHost + request.path)
+      .setBody(body)
+      .setHeaders(request.headers.toMap.mapValues(_.asJavaCollection).asJava)
+      .build()
+  }
+
+  def resultFromNingReponse(response: ning.Response): SimpleResult = {
+    Logger.info("Starting resultFromNingResponse")
+    val headers = for (k <- response.getHeaders.keySet().asScala)
+                yield response.getHeaders.get(k).asScala.map((k,_)).toSeq
+    Logger.info("Headers ready!")
+    val s = Status(response.getStatusCode)(response.getResponseBodyAsBytes)
+              .withHeaders(headers.toSeq.flatten:_*)
+    Logger.info("Returning")
+    s
   }
 }
 

@@ -1,5 +1,6 @@
 package mesos
 
+import _root_.util.Listener
 import com.fasterxml.jackson.core.JsonParseException
 import java.util
 import mesosphere.mesos.util.{FrameworkInfo, ScalarResource}
@@ -17,7 +18,7 @@ import play.api.Play.current
 import play.Logger
 import play.Logger.ALogger
 
-import mesos.Action._
+import mesos.Message._
 import models.Stores
 import scala.io.Source
 
@@ -49,15 +50,17 @@ class Scheduler(val conn: Conf)
                        slaveId: SlaveID,
                        data: Array[Byte]) {
     try {
-      Json.parse(new String(data, "UTF-8")).validate[Action].map {
+      Json.parse(new String(data, "UTF-8")).validate[Message].map {
         case ExecutorJoin(id, hostname, ip, port) => {
           log.info(s"Executor joining: $ip:$port")
           nodes.single += (id -> ExecutorNode(executorId.getValue,
                                               hostname,
                                               ip, port,
                                               slaveId.getValue))
-          val act = NewRoutes(Stores.routesAsChanges(passwordProtect = false))
-          driver.sendFrameworkMessage(executorId, slaveId, act)
+          val me = Listener.guess()
+          val routeUpdates = Stores.routesAsChanges(passwordProtect = false)
+          val ms = Seq(NewCoordinator(me.ip, me.port), NewRoutes(routeUpdates))
+          for (m <- ms) driver.sendFrameworkMessage(executorId, slaveId, m)
         }
         case m => log.info(s"Schedulers don't handle ${m.getClass} messages.")
       } recoverTotal {
@@ -132,7 +135,6 @@ class Scheduler(val conn: Conf)
                  masterInfo: MasterInfo) {
     log.info(s"registered as ${frameworkId.getValue}")
     idList.single.transform(_ :+ frameworkId)
-    log.info(s"${idList.single.get}")
     this.driver = driver
   }
 

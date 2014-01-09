@@ -28,7 +28,7 @@ object Global extends GlobalSettings {
     for (m <- optionalMesosSettings) {
       val conn = mesos.Conf.fromConfig(m).get
       Logger.info(s"Mesos master: ${conn.master}")
-      mesos.Coordinator.connection = Some(conn)
+      mesos.Coordinator.conf = Some(conn)
       mesos.Coordinator.start()
     }
   }

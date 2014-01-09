@@ -11,25 +11,25 @@ import play.Logger
 object Coordinator {
   val log = Logger.of("mesos")
   val frameworkIDs: Ref[Seq[FrameworkID]] = Ref(Seq[FrameworkID]())
-  var connection: Option[Conf] = None
+  var conf: Option[Conf] = None
   var scheduler: Option[Scheduler] = None
   var executor: Option[Executor] = None
 
   /**
    * Start subsystems in the background.
    */
-  def start() = connection match {
-    case Some(conn) => {
-      val conf = "conf/mesos/"
-      val executorFile = Play.application.getFile(s"$conf/executor").exists()
-      val schedulerFile = Play.application.getFile(s"$conf/scheduler").exists()
+  def start() = conf match {
+    case Some(conf) => {
+      val dir = "conf/mesos/"
+      val executorFile = Play.application.getFile(s"$dir/executor").exists()
+      val schedulerFile = Play.application.getFile(s"$dir/scheduler").exists()
       if (executorFile) {
-        val e = new Executor(conn)
+        val e = new Executor(conf)
         new Thread(e).start()
         executor = Some(e)
       }
       if (schedulerFile || ! executorFile) {
-        val s = new Scheduler(conn)
+        val s = new Scheduler(conf)
         new Thread(s).start()
         scheduler = Some(s)
       }
