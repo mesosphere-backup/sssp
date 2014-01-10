@@ -53,10 +53,8 @@ class Scheduler(val conn: Conf)
       Json.parse(new String(data, "UTF-8")).validate[Message].map {
         case ExecutorJoin(id, hostname, ip, port) => {
           log.info(s"Executor joining: $ip:$port")
-          nodes.single += (id -> ExecutorNode(executorId.getValue,
-                                              hostname,
-                                              ip, port,
-                                              slaveId.getValue))
+          val (id, slave) = (executorId.getValue, slaveId.getValue)
+          nodes.single += (id -> ExecutorNode(id, hostname, ip, port, slave))
           val me = Listener.guess()
           val routeUpdates = Stores.routesAsChanges(passwordProtect = false)
           val ms = Seq(NewCoordinator(me.ip, me.port), NewRoutes(routeUpdates))
@@ -72,7 +70,20 @@ class Scheduler(val conn: Conf)
   }
 
   def statusUpdate(driver: SchedulerDriver, status: TaskStatus) {
-    log.info(s"status update: ${status.getState.name()}")
+    val id: String = status.getTaskId.getValue
+    val state = status.getState
+    def lost() {
+      nodes.single -= id
+      log.warn(s"Task $id // ${state.name()}")
+    }
+
+    status.getState match {
+      case TaskState.TASK_FAILED   => lost()
+      case TaskState.TASK_FINISHED => lost()
+      case TaskState.TASK_KILLED   => lost()
+      case TaskState.TASK_LOST     => lost()
+      case _                       => {}
+    }
   }
 
   def offerRescinded(driver: SchedulerDriver, offerId: OfferID) {}
@@ -93,8 +104,9 @@ class Scheduler(val conn: Conf)
       val env = s"export DIST=$dist PORT=$port SSSP_MESOS_MODE=executor"
       val script = Play.application.getFile("conf/sssp-for-mesos")
       val cmd = CommandInfo.newBuilder
-        .setValue("set -x && " + env + " &&\n" + Source.fromFile(script, "UTF-8").mkString)
+        .setValue(env + " &&\n" + Source.fromFile(script, "UTF-8").mkString)
 
+      // NB: This is the task ID and the executor ID.
       val id = {
         val fmt = DateTimeFormat
           .forPattern("yyyyMMDD'T'HHmmss.SSS'Z'").withZoneUTC
@@ -153,6 +165,12 @@ class Scheduler(val conn: Conf)
      new MesosSchedulerDriver(this, FrameworkInfo("SSSP").toProto, conn.master)
     val status = driver.run().getValueDescriptor.getFullName
     log.info(s"Final status: $status")
+  }
+
+  // TODO: Spawn in background, to handle live cluster size reduction.
+  def cull() {
+    for (id <- nodes.single.keys.take(nodes.single.size - conn.nodes))
+      driver.killTask(TaskID.newBuilder().setValue(id).build())
   }
 
   def syncRoutes() {
