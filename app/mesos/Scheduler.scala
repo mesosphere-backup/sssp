@@ -1,6 +1,6 @@
 package mesos
 
-import _root_.util.Listener
+import util.Listener
 import com.fasterxml.jackson.core.JsonParseException
 import java.util
 import mesosphere.mesos.util.{FrameworkInfo, ScalarResource}
@@ -10,6 +10,7 @@ import org.joda.time.DateTime
 import org.joda.time.format.DateTimeFormat
 import scala.collection.JavaConverters._
 import scala.concurrent.stm._
+import scala.io.Source
 import scala.util.Random
 
 import play.api.libs.json._
@@ -20,7 +21,6 @@ import play.Logger.ALogger
 
 import mesos.Message._
 import models.Stores
-import scala.io.Source
 
 
 class Scheduler(val conn: Conf)
