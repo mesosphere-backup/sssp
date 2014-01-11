@@ -1,6 +1,5 @@
 package mesos
 
-import util.Listener
 import com.fasterxml.jackson.core.JsonParseException
 import java.util
 import mesosphere.mesos.util.{FrameworkInfo, ScalarResource}
@@ -21,6 +20,7 @@ import play.Logger.ALogger
 
 import mesos.Message._
 import models.Stores
+import _root_.util.Listener
 
 
 class Scheduler(val conn: Conf)
