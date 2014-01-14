@@ -1,6 +1,7 @@
 package mesosphere.sssp.test
 
-import mesosphere.sssp.{ Routes, S3Notary }
+import mesosphere.sssp.{Routes, S3Notary}
+
 
 class RoutesSpec extends Spec {
 
