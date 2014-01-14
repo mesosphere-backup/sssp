@@ -8,9 +8,7 @@ class Routes extends mutable.Map[Seq[String], S3Notary] {
   val routes: TMap[Seq[String], S3Notary] = TMap()
 
   def deepestHandler(path: Seq[String]): Option[(Seq[String], S3Notary)] =
-    path.inits.flatMap { prefix =>
-      get(prefix).map { notary => (prefix, notary) }
-    }.take(1).toSeq.headOption
+    path.inits.flatMap(pre => get(pre).map((pre, _))).take(1).toSeq.headOption
 
   def -=(k: Seq[String]): Routes.this.type = {
     routes.single -= k
