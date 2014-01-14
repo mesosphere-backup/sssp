@@ -21,13 +21,13 @@ class RoutesSpec extends Spec {
     f.routes += pathC -> notaryC
 
     val query1 = Seq("a", "b", "x")
-    f.routes.deepestHandler(query1) should equal (pathA -> notaryA)
+    f.routes.deepestHandler(query1) should equal (Some(pathA -> notaryA))
 
     val query2 = Seq("a", "b", "c", "x")
-    f.routes.deepestHandler(query2) should equal (pathB -> notaryB)
+    f.routes.deepestHandler(query2) should equal (Some(pathB -> notaryB))
 
     val query3 = Seq("a", "a", "c")
-    f.routes.deepestHandler(query3) should equal (pathC -> notaryC)
+    f.routes.deepestHandler(query3) should equal (Some(pathC -> notaryC))
   }
 	
 }
