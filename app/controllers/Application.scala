@@ -193,7 +193,7 @@ object Application extends Controller {
     } yield (a, b)
   }
 
-  def distSelf(executor: Boolean = true): File = {
+  def distSelf(): File = {
     val cwd = Play.application.path.getCanonicalPath
     val tmp = f"/tmp/sssp-${Random.nextLong().abs}%016x"
     val tar = s"$tmp.tgz"
