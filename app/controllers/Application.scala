@@ -71,31 +71,45 @@ object Application extends Controller {
    *  S3, so the root needs to serve a few different purposes.
    */
   def routeRootGets: Action[AnyContent] = Action { implicit request =>
-    if (request.contentType
-               .map(Seq("application/json", "text/json").contains(_))
-               .getOrElse(false)) {
+    def tsv() = {
+      WebLogger.info("Displaying cluster information.")
+      // Using listener.port as the unique port works because this request is
+      // only answered by the single scheduler. Once this goes HA, we need to
+      // find another way.
+      val port  = Listener.guess().port
+      val addrs = for ((host, port, _) <- endpoints()) yield s"$host:$port"
+      Ok(s"sssp\t$port\t${addrs.mkString("\t")}\n")
+    }
+    def json() = {
       WebLogger.info("Displaying routes as JSON.")
       Ok(Json.prettyPrint(Stores.routesAsJson(passwordProtect = true)))
-    } else {
-      if (basicAuth() == Some((Dist.user, Dist.pass))) {
-        WebLogger.info("Providing tarball of running application.")
-        val f: File = distSelf()
-        def delete() {
-          Logger.info(s"Deleting dist tarball ${f.getAbsolutePath}")
-          f.delete()
+    }
+    // I tried render{} and Accepting(...) extractors but it didn't work.
+    request.acceptedTypes.take(1).map(_.toString()) match {
+      case Seq("application/json") => json()
+      case Seq("text/json") => json()
+      case Seq("text/plain")     => tsv()
+      case Seq("text/tab-separated-values")     => tsv()
+      case _ => {
+        if (basicAuth() == Some((Dist.user, Dist.pass))) {
+          WebLogger.info("Providing tarball of running application.")
+          val f: File = distSelf()
+          def delete() {
+            Logger.info(s"Deleting dist tarball ${f.getAbsolutePath}")
+            f.delete()
+          }
+          Ok.sendFile(f, fileName = _ => "sssp.tgz", onClose = delete)
+            .as("application/x-gzip")
+        } else {
+          WebLogger.info("Sending back routes as a form.")
+          Ok(views.html.index(routesAsFormChanges(), FormChange.form))
         }
-        Ok.sendFile(f, fileName = _ => "sssp.tgz", onClose = delete)
-          .as("application/x-gzip")
-      } else {
-        WebLogger.info("Sending back routes as a form.")
-        Ok(views.html.index(routesAsFormChanges(), FormChange.form))
       }
     }
   }
 
   def handleChanges = Action.async { implicit request =>
-    val b = request.contentType == Some("application/x-www-form-urlencoded") &&
-            request.body.asText.filter(_.take(1) == "{").isEmpty
+    val b = request.contentType == Some("application/x-www-form-urlencoded")
     (if (b) handleForm else handleJson)(request)
   }
 
