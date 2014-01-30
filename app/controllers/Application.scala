@@ -86,10 +86,10 @@ object Application extends Controller {
     }
     // I tried render{} and Accepting(...) extractors but it didn't work.
     request.acceptedTypes.take(1).map(_.toString()) match {
-      case Seq("application/json") => json()
-      case Seq("text/json") => json()
-      case Seq("text/plain")     => tsv()
-      case Seq("text/tab-separated-values")     => tsv()
+      case Seq("application/json")          => json()
+      case Seq("text/json")                 => json()
+      case Seq("text/plain")                => tsv()
+      case Seq("text/tab-separated-values") => tsv()
       case _ => {
         if (basicAuth() == Some((Dist.user, Dist.pass))) {
           WebLogger.info("Providing tarball of running application.")
