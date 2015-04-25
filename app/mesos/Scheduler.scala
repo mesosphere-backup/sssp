@@ -89,7 +89,9 @@ class Scheduler(val conn: Conf)
   def offerRescinded(driver: SchedulerDriver, offerId: OfferID) {}
 
   def resourceOffers(driver: SchedulerDriver, offers: util.List[Offer]) {
-    for (offer <- offers.asScala.take(conn.nodes - nodes.single.size)) {
+    val (offersToAccept, offersToDecline) = offers.asScala.splitAt(conn.nodes - nodes.single.size)
+
+    for (offer <- offersToAccept) {
       log.info(s"handling offer: ${offer.getId.getValue}")
 
       val port: Long = offer.getResourcesList.asScala
@@ -134,6 +136,11 @@ class Scheduler(val conn: Conf)
         .build
 
       driver.launchTasks(offer.getId, Seq(task).asJava)
+    }
+
+    // Decline the remaining offers
+    for (offer <- offersToDecline) {
+      driver.declineOffer(offer.getId, Filters.getDefaultInstance)
     }
   }
 
